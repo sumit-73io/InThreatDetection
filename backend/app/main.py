@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.database.mongodb import connect_to_mongo, close_mongo_connection
-from app.routers import activities, dashboard, auth, employees, ai, quantum
+from app.routers import activities, dashboard, auth, employees, quantum
 from app.services.quantum_crypto import quantum_engine
 
 
@@ -29,7 +29,6 @@ app.include_router(activities.router)
 app.include_router(dashboard.router)
 app.include_router(auth.router)
 app.include_router(employees.router) 
-app.include_router(ai.router)
 app.include_router(quantum.router)
 
 @app.get("/")

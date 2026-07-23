@@ -62,16 +62,7 @@ export const loginEmployee = async (employeeId, password) => {
     return response.data;
 };
 
-// Generate AI Threat Analysis
-export const generateAIAnalysis = async (employeeId, role, totalRisk, timeline) => {
-    const response = await api.post('/ai/analyze', {
-        employee_id: employeeId,
-        role: role,
-        risk_score: totalRisk,
-        timeline: timeline
-    }, getAuthHeaders());
-    return response.data;
-};
+
 
 // ─── Quantum Security APIs ──────────────────────────────────────────
 

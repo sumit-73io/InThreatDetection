@@ -43,10 +43,10 @@ export default function QuantumShield({ isDark }) {
         }
     };
 
-    const cardBg = isDark ? 'bg-[#1e293b] border-gray-700' : 'bg-[#f2f6f6] border-gray-200';
+    const cardBg = isDark ? 'bg-[#1e222b] border-[#2d3340]' : 'bg-white border-gray-100';
     const textPrimary = isDark ? 'text-gray-200' : 'text-gray-800';
     const textSecondary = isDark ? 'text-gray-400' : 'text-gray-500';
-    const innerBg = isDark ? 'bg-[#0f172a]' : 'bg-white';
+    const innerBg = isDark ? 'bg-[#15171e]' : 'bg-gray-50';
 
     const overallScore = integrityStats?.overall?.integrity_score ?? 100;
     const chainIntact = integrityStats?.overall?.chain_intact ?? true;
@@ -125,7 +125,7 @@ export default function QuantumShield({ isDark }) {
 
             {/* Expanded Details Panel */}
             {expanded && (
-                <div className={`border-t ${isDark ? 'border-gray-700' : 'border-gray-200'} px-6 py-5 space-y-5`}
+                <div className={`border-t ${isDark ? 'border-[#2d3340]' : 'border-gray-200'} px-6 py-5 space-y-5`}
                     style={{ animation: 'slideDown 0.3s ease-out' }}
                 >
                     {/* Algorithm Suite */}
@@ -133,7 +133,7 @@ export default function QuantumShield({ isDark }) {
                         <h4 className={`text-xs font-bold uppercase tracking-wider mb-3 ${textSecondary}`}>Algorithm Suite</h4>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                             {quantumStatus?.algorithm_suite && Object.entries(quantumStatus.algorithm_suite).map(([key, value]) => (
-                                <div key={key} className={`${innerBg} rounded-lg px-3 py-2.5 border ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+                                <div key={key} className={`${innerBg} rounded-lg px-3 py-2.5 border ${isDark ? 'border-[#2d3340]' : 'border-gray-200'}`}>
                                     <p className={`text-[10px] uppercase tracking-wider font-semibold ${textSecondary}`}>
                                         {key.replace(/_/g, ' ')}
                                     </p>
@@ -147,23 +147,23 @@ export default function QuantumShield({ isDark }) {
                     <div>
                         <h4 className={`text-xs font-bold uppercase tracking-wider mb-3 ${textSecondary}`}>Data Integrity Status</h4>
                         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                            <div className={`${innerBg} rounded-lg px-4 py-3 border ${isDark ? 'border-gray-700' : 'border-gray-200'} text-center`}>
+                            <div className={`${innerBg} rounded-lg px-4 py-3 border ${isDark ? 'border-[#2d3340]' : 'border-gray-200'} text-center`}>
                                 <p className={`text-2xl font-bold ${textPrimary}`}>{integrityStats?.overall?.total_documents ?? 0}</p>
                                 <p className={`text-[10px] uppercase tracking-wider font-semibold ${textSecondary}`}>Total Records</p>
                             </div>
-                            <div className={`${innerBg} rounded-lg px-4 py-3 border ${isDark ? 'border-gray-700' : 'border-gray-200'} text-center`}>
+                            <div className={`${innerBg} rounded-lg px-4 py-3 border ${isDark ? 'border-[#2d3340]' : 'border-gray-200'} text-center`}>
                                 <p className="text-2xl font-bold text-emerald-400">{integrityStats?.overall?.verified ?? 0}</p>
                                 <p className={`text-[10px] uppercase tracking-wider font-semibold ${textSecondary}`}>Verified ✅</p>
                             </div>
-                            <div className={`${innerBg} rounded-lg px-4 py-3 border ${isDark ? 'border-gray-700' : 'border-gray-200'} text-center`}>
+                            <div className={`${innerBg} rounded-lg px-4 py-3 border ${isDark ? 'border-[#2d3340]' : 'border-gray-200'} text-center`}>
                                 <p className="text-2xl font-bold text-red-400">{integrityStats?.overall?.tampered ?? 0}</p>
                                 <p className={`text-[10px] uppercase tracking-wider font-semibold ${textSecondary}`}>Tampered 🚨</p>
                             </div>
-                            <div className={`${innerBg} rounded-lg px-4 py-3 border ${isDark ? 'border-gray-700' : 'border-gray-200'} text-center`}>
+                            <div className={`${innerBg} rounded-lg px-4 py-3 border ${isDark ? 'border-[#2d3340]' : 'border-gray-200'} text-center`}>
                                 <p className="text-2xl font-bold text-amber-400">{integrityStats?.overall?.unverified ?? 0}</p>
                                 <p className={`text-[10px] uppercase tracking-wider font-semibold ${textSecondary}`}>Unverified ⚠️</p>
                             </div>
-                            <div className={`${innerBg} rounded-lg px-4 py-3 border ${isDark ? 'border-gray-700' : 'border-gray-200'} text-center`}>
+                            <div className={`${innerBg} rounded-lg px-4 py-3 border ${isDark ? 'border-[#2d3340]' : 'border-gray-200'} text-center`}>
                                 <p className={`text-2xl font-bold ${chainIntact ? 'text-emerald-400' : 'text-red-400'}`}>
                                     {chainIntact ? '🔗' : '💔'}
                                 </p>
@@ -181,7 +181,7 @@ export default function QuantumShield({ isDark }) {
                                 const stats = integrityStats[collection];
                                 if (!stats) return null;
                                 return (
-                                    <div key={collection} className={`${innerBg} rounded-lg px-4 py-3 border ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+                                    <div key={collection} className={`${innerBg} rounded-lg px-4 py-3 border ${isDark ? 'border-[#2d3340]' : 'border-gray-200'}`}>
                                         <div className="flex justify-between items-center mb-2">
                                             <span className={`text-xs font-bold uppercase ${textSecondary}`}>
                                                 {collection === 'activities' ? '📋 Activities' : '🚨 Alerts'}

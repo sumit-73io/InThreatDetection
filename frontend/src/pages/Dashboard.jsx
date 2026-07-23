@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { getActivities, getAlerts, createEmployee, getEmployees, generateAIAnalysis } from '../services/api';
+import { getActivities, getAlerts, getEmployees } from '../services/api';
+import { generateReport } from '../ai/reportGenerator';
 import QuantumShield from '../components/QuantumShield';
 import IntegrityBadge from '../components/IntegrityBadge';
 
@@ -35,7 +36,7 @@ function formatActionString(actionStr) {
     return actionStr.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
 }
 
-export default function Dashboard() {
+export default function Dashboard({ isDark }) {
     // Core State
     const [activities, setActivities] = useState([]);
     const [alerts, setAlerts] = useState([]);
@@ -43,9 +44,7 @@ export default function Dashboard() {
     const [loading, setLoading] = useState(true);
     
     // UI State
-    const [showIAM, setShowIAM] = useState(false);
     const [selectedUser, setSelectedUser] = useState(null);
-    const [isDark, setIsDark] = useState(true);
     
     // AI State
     const [aiLoading, setAiLoading] = useState(false);
@@ -162,77 +161,25 @@ export default function Dashboard() {
     if (loading) return <div className="p-8 text-gray-500 font-medium bg-gray-950 min-h-screen">Loading Core Systems...</div>;
 
     // Theme Variables
-    const themeBg = isDark ? "bg-[#0b1120]" : "bg-white";
+    const themeBg = isDark ? "bg-[#15171e]" : "bg-[#f8f9fa]";
     const themeText = isDark ? "text-gray-200" : "text-gray-800";
-    const headerBg = isDark ? "bg-[#1e293b] border-b border-gray-700" : "bg-[#24585f] shadow";
-    const cardBg = isDark ? "bg-[#1e293b] border border-gray-700" : "bg-[#f2f6f6] border border-transparent";
-    const tableBg = isDark ? "bg-[#0f172a] border-gray-700" : "bg-white border-gray-200";
-    const rowHover = isDark ? "hover:bg-[#1e293b] border-gray-800" : "hover:bg-gray-50 border-gray-100";
-    const tableHeader = isDark ? "text-gray-400 border-gray-700" : "text-[#24585f] border-gray-200";
+    const headerBg = isDark ? "bg-[#1e222b] border-b border-[#2d3340]" : "bg-white border-b border-gray-200 shadow-sm";
+    const cardBg = isDark ? "bg-[#1e222b] border border-[#2d3340] shadow-md" : "bg-white border border-gray-100 shadow-sm";
+    const tableBg = isDark ? "bg-[#1e222b] border-[#2d3340]" : "bg-white border-gray-200 shadow-sm";
+    const rowHover = isDark ? "hover:bg-[#262b36] border-[#2d3340]" : "hover:bg-gray-50 border-gray-100";
+    const tableHeader = isDark ? "text-gray-400 border-[#2d3340]" : "text-gray-500 border-gray-200";
 
     return (
         <div className={`${themeBg} ${themeText} min-h-screen p-8 font-sans transition-colors duration-300`}>
             {/* Header */}
-            <div className={`${headerBg} text-white rounded-t-md px-6 py-4 flex justify-between items-center transition-colors duration-300`}>
+            <div className={`${headerBg} ${isDark ? 'text-white' : 'text-gray-800'} rounded-t-md px-6 py-4 flex justify-between items-center transition-colors duration-300`}>
                 <div className="flex items-center space-x-2">
-                    <h1 className="text-xl font-bold tracking-wide">InThreatDetection <span className="font-light px-2">·</span> Live Risk Dashboard</h1>
+                    <h1 className="text-xl font-bold tracking-wide">Live Risk Dashboard</h1>
                 </div>
                 <div className="flex items-center space-x-6">
-                    <button onClick={() => setShowIAM(!showIAM)} className="text-sm font-semibold hover:text-blue-300 transition">
-                        {showIAM ? "Close Provisioning" : "+ Provision User"}
-                    </button>
-                    <button onClick={() => setIsDark(!isDark)} className="bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-md text-sm font-medium transition border border-white/10 flex items-center space-x-2">
-                        <span>{isDark ? '☀️ Light Mode' : '🌙 Dark Mode'}</span>
-                    </button>
-                    <span className="text-[#d4b95e] text-sm font-medium border-l border-white/20 pl-6">Analyst View</span>
+                    <span className={`text-sm font-medium border-l pl-6 ${isDark ? 'border-[#2d3340] text-blue-400' : 'border-gray-200 text-blue-600'}`}>Analyst View</span>
                 </div>
             </div>
-
-            {/* IAM Provisioning Panel */}
-            {showIAM && (
-                <div className={`${isDark ? 'bg-[#1e293b] border-gray-700' : 'bg-gray-50 border-gray-200'} p-4 border-x border-b shadow-sm mb-4 transition-colors`}>
-                    <h2 className={`text-sm font-bold mb-3 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Provision Employee Account</h2>
-                    <form 
-                        onSubmit={async (e) => {
-                            e.preventDefault();
-                            const empId = e.target.empId.value;
-                            const empName = e.target.empName.value;
-                            const empPass = e.target.empPass.value;
-                            const empRole = e.target.empRole.value; 
-                            try {
-                                await createEmployee(empId, empName, empPass, empRole);
-                                alert(`Success: ${empRole} account ${empId} provisioned.`);
-                                e.target.reset();
-                                setShowIAM(false);
-                                setSelectedUser(null);
-                                setAiReport(null);
-                                fetchDashboardData(); 
-                            } catch (err) {
-                                alert("Failed to create employee.");
-                            }
-                        }} 
-                        className="flex flex-wrap gap-3 items-center"
-                    >
-                        <input name="empName" required placeholder="Full Name (e.g., John Doe)" className={`border rounded px-3 py-1.5 text-sm w-44 outline-none ${isDark ? 'bg-[#0f172a] border-gray-600 text-white' : 'bg-white border-gray-300 text-black'}`}/>
-                        <input name="empId" required placeholder="User ID (e.g., ADM-01)" className={`border rounded px-3 py-1.5 text-sm w-36 outline-none ${isDark ? 'bg-[#0f172a] border-gray-600 text-white' : 'bg-white border-gray-300 text-black'}`}/>
-                        <select name="empRole" required className={`border rounded px-3 py-1.5 text-sm w-40 outline-none cursor-pointer ${isDark ? 'bg-[#0f172a] border-gray-600 text-white' : 'bg-white border-gray-300 text-black'}`}>
-                            <option value="" disabled selected>Select Role</option>
-                            <option value="Admin">Admin</option>
-                            <option value="Sys Admin">Sys Admin</option>
-                            <option value="DB Admin">DB Admin</option>
-                            <option value="Dev">Dev / Engineer</option>
-                            <option value="HR">Human Resources</option>
-                            <option value="Design">Design</option>
-                            <option value="Branch Manager">Branch Manager</option>
-                            <option value="Ops Analyst">Ops Analyst</option>
-                            <option value="Support Staff">Support Staff</option>
-                            <option value="User">Standard User</option>
-                        </select>
-                        <input name="empPass" required type="password" placeholder="Password" className={`border rounded px-3 py-1.5 text-sm w-36 outline-none ${isDark ? 'bg-[#0f172a] border-gray-600 text-white' : 'bg-white border-gray-300 text-black'}`}/>
-                        <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white py-1.5 px-4 rounded text-sm transition">Create</button>
-                    </form>
-                </div>
-            )}
 
             <div className={`border-x border-b rounded-b-md shadow-sm p-6 mb-8 transition-colors duration-300 ${tableBg}`}>
                 
@@ -383,34 +330,34 @@ export default function Dashboard() {
             {/* Drill-Down Modal Overlay */}
             {selectedUser && (
                 <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-                    <div className={`rounded-lg shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[80vh] ${isDark ? 'bg-[#0f172a] border border-gray-700' : 'bg-white'}`}>
+                    <div className={`rounded-lg shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[80vh] ${isDark ? 'bg-[#1e222b] border border-[#2d3340]' : 'bg-white'}`}>
                         {/* Modal Header */}
-                        <div className={`${headerBg} px-6 py-4 flex justify-between items-center text-white`}>
+                        <div className={`${headerBg} ${isDark ? 'text-white' : 'text-gray-800'} px-6 py-4 flex justify-between items-center`}>
                             <div>
                                 <h2 className="text-lg font-bold">Investigation: {selectedUser.name}</h2>
-                                <p className="text-sm opacity-80">{selectedUser.id} | {selectedUser.role} | Total Risk: {selectedUser.totalRisk}</p>
+                                <p className={`text-sm ${isDark ? 'opacity-80' : 'text-gray-500'}`}>{selectedUser.id} | {selectedUser.role} | Total Risk: {selectedUser.totalRisk}</p>
                             </div>
                             <button 
                                 onClick={() => {
                                     setSelectedUser(null);
                                     setAiReport(null);
                                 }} 
-                                className="text-white hover:text-gray-300 font-bold text-2xl leading-none"
+                                className={`${isDark ? 'text-white hover:text-gray-300' : 'text-gray-500 hover:text-gray-800'} font-bold text-2xl leading-none`}
                             >
                                 &times;
                             </button>
                         </div>
                         
                         {/* Modal Timeline */}
-                        <div className={`p-6 overflow-y-auto flex-1 ${isDark ? 'bg-[#0b1120]' : 'bg-gray-50'}`}>
+                        <div className={`p-6 overflow-y-auto flex-1 ${isDark ? 'bg-[#15171e]' : 'bg-gray-50'}`}>
                             <h3 className={`font-bold mb-4 border-b pb-2 ${isDark ? 'text-gray-200 border-gray-700' : 'text-gray-700 border-gray-200'}`}>Activity Timeline</h3>
                             <div className="space-y-4 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-gray-400 before:to-transparent">
                                 {selectedUser.timeline.map((act, index) => (
                                     <div key={index} className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
-                                        <div className={`flex items-center justify-center w-10 h-10 rounded-full border shadow shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 ${isDark ? 'bg-gray-800 border-gray-600' : 'bg-slate-200 border-white'}`}>
+                                        <div className={`flex items-center justify-center w-10 h-10 rounded-full border shadow shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 ${isDark ? 'bg-[#1e222b] border-[#2d3340]' : 'bg-slate-200 border-white'}`}>
                                             <span className={`w-3 h-3 rounded-full ${act.risk_score > 0 ? 'bg-orange-500' : 'bg-gray-400'}`}></span>
                                         </div>
-                                        <div className={`w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] p-4 rounded-lg shadow-sm border ${isDark ? 'bg-[#1e293b] border-gray-700' : 'bg-white border-slate-200'}`}>
+                                        <div className={`w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] p-4 rounded-lg shadow-sm border ${isDark ? 'bg-[#1e222b] border-[#2d3340]' : 'bg-white border-slate-200'}`}>
                                             <div className="flex justify-between items-center mb-1">
                                                 <div className={`font-bold text-sm ${isDark ? 'text-gray-200' : 'text-slate-700'}`}>{formatActionString(act.action)}</div>
                                                 <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-slate-500'}`}>{formatTime(act.timestamp)}</div>
@@ -432,48 +379,78 @@ export default function Dashboard() {
                         </div>
 
                         {/* AI Explanation Engine UI */}
-                        <div className={`p-6 border-t ${isDark ? 'bg-[#0f172a] border-gray-700' : 'bg-white border-gray-200'}`}>
+                        <div className={`p-6 border-t ${isDark ? 'bg-[#15171e] border-[#2d3340]' : 'bg-white border-gray-200'}`}>
                             
                             {/* AI Output Container */}
                             {aiReport && (
-                                <div className={`mb-4 p-4 rounded-lg border shadow-inner ${isDark ? 'bg-[#1e293b] border-gray-700 text-gray-300' : 'bg-blue-50 border-blue-100 text-blue-900'}`}>
-                                    <h4 className="font-bold text-sm mb-2 flex items-center space-x-2">
-                                        <span>🧠 AI Forensic Analysis</span>
+                                <div className={`mb-4 p-5 rounded-lg border shadow-inner ${isDark ? 'bg-[#1e222b] border-[#2d3340] text-gray-300' : 'bg-[#f8f9fa] border-gray-200 text-gray-800'}`}>
+                                    <h4 className="font-bold text-sm mb-3 flex items-center space-x-2">
+                                        <span>🧠 AI Forensic Analysis (Local Engine)</span>
                                     </h4>
-                                    <div className="text-sm space-y-2 whitespace-pre-wrap leading-relaxed">
+                                    <div id="ai-report-content" className="text-sm space-y-4 whitespace-pre-wrap leading-relaxed">
                                         {aiReport}
+                                    </div>
+                                    
+                                    {/* Report Action Buttons */}
+                                    <div className={`mt-5 pt-4 border-t flex flex-wrap gap-2 ${isDark ? 'border-[#2d3340]' : 'border-gray-200'}`}>
+                                        <button 
+                                            onClick={() => {
+                                                navigator.clipboard.writeText(aiReport);
+                                                alert("Report copied to clipboard!");
+                                            }}
+                                            className={`px-3 py-1.5 text-xs font-semibold rounded-md border transition ${isDark ? 'bg-[#15171e] border-[#2d3340] hover:bg-[#262b36] text-gray-300' : 'bg-white border-gray-300 hover:bg-gray-50 text-gray-700'}`}
+                                        >
+                                            📋 Copy Report
+                                        </button>
+                                        <button 
+                                            onClick={() => {
+                                                const blob = new Blob([aiReport], { type: 'text/plain' });
+                                                const url = window.URL.createObjectURL(blob);
+                                                const a = document.createElement('a');
+                                                a.href = url;
+                                                a.download = `Forensic_Report_${selectedUser.id}.txt`;
+                                                a.click();
+                                            }}
+                                            className={`px-3 py-1.5 text-xs font-semibold rounded-md border transition ${isDark ? 'bg-[#15171e] border-[#2d3340] hover:bg-[#262b36] text-gray-300' : 'bg-white border-gray-300 hover:bg-gray-50 text-gray-700'}`}
+                                        >
+                                            ⬇️ Download Report
+                                        </button>
+                                        <button 
+                                            onClick={() => window.print()}
+                                            className={`px-3 py-1.5 text-xs font-semibold rounded-md border transition ${isDark ? 'bg-[#15171e] border-[#2d3340] hover:bg-[#262b36] text-gray-300' : 'bg-white border-gray-300 hover:bg-gray-50 text-gray-700'}`}
+                                        >
+                                            📄 Export PDF
+                                        </button>
+                                        <button 
+                                            onClick={() => window.print()}
+                                            className={`px-3 py-1.5 text-xs font-semibold rounded-md border transition ${isDark ? 'bg-[#15171e] border-[#2d3340] hover:bg-[#262b36] text-gray-300' : 'bg-white border-gray-300 hover:bg-gray-50 text-gray-700'}`}
+                                        >
+                                            🖨️ Print Report
+                                        </button>
                                     </div>
                                 </div>
                             )}
 
                             {/* Action Bar */}
                             <div className="flex justify-end space-x-3">
-                                {aiLoading && <span className="flex items-center text-sm text-blue-500 font-bold animate-pulse mr-2">Synthesizing Telemetry...</span>}
+                                {aiLoading && <span className="flex items-center text-sm text-blue-500 font-bold animate-pulse mr-2">Synthesizing Security Intelligence...</span>}
                                 
                                 <button 
                                     disabled={aiLoading}
-                                    onClick={async () => {
+                                    onClick={() => {
                                         setAiLoading(true);
-                                        try {
-                                            const res = await generateAIAnalysis(
-                                                selectedUser.id, 
-                                                selectedUser.role, 
-                                                selectedUser.totalRisk, 
-                                                selectedUser.timeline
-                                            );
-                                            setAiReport(res.analysis);
-                                        } catch (err) {
-                                            // 1. Print the full error object to the Browser Console
-                                            console.error("🔥 FULL AI ERROR:", err);
-                                            
-                                            // 2. Try to extract the exact Python error message from FastAPI
-                                            const backendError = err.response?.data?.detail || err.message;
-                                            
-                                            // 3. Show it in the pop-up alert
-                                            alert(`AI Engine Failed!\n\nReason: ${backendError}`);
-                                        } finally {
-                                            setAiLoading(false);
-                                        }
+                                        // Simulate a small delay so the user sees the "Synthesizing Security Intelligence..." animation
+                                        setTimeout(() => {
+                                            try {
+                                                const reportText = generateReport(selectedUser.timeline, selectedUser);
+                                                setAiReport(reportText);
+                                            } catch (err) {
+                                                console.error("Local AI Engine Error:", err);
+                                                alert(`AI Engine Failed!\n\nReason: ${err.message}`);
+                                            } finally {
+                                                setAiLoading(false);
+                                            }
+                                        }, 1000);
                                     }}
                                     className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md font-medium shadow flex items-center space-x-2 transition disabled:opacity-50"
                                 >
@@ -492,7 +469,7 @@ export default function Dashboard() {
                     onClick={() => setMetricModal(null)}
                 >
                     <div
-                        className={`rounded-xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[80vh] ${isDark ? 'bg-[#0f172a] border border-gray-700' : 'bg-white border border-gray-200'}`}
+                        className={`rounded-xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[80vh] ${isDark ? 'bg-[#1e222b] border border-[#2d3340]' : 'bg-white border border-gray-200'}`}
                         onClick={e => e.stopPropagation()}
                     >
                         {/* Modal Header */}
@@ -531,7 +508,7 @@ export default function Dashboard() {
                             ) : (
                                 <table className="w-full text-left text-sm border-collapse">
                                     <thead>
-                                        <tr className={`border-b text-xs uppercase tracking-wider font-bold ${isDark ? 'text-gray-500 border-gray-700 bg-[#0b1120]' : 'text-gray-400 border-gray-200 bg-gray-50'}`}>
+                                        <tr className={`border-b text-xs uppercase tracking-wider font-bold ${isDark ? 'text-gray-500 border-[#2d3340] bg-[#15171e]' : 'text-gray-400 border-gray-200 bg-gray-50'}`}>
                                             <th className="px-6 py-3">Employee</th>
                                             <th className="px-6 py-3">Action</th>
                                             <th className="px-6 py-3">Risk Score</th>
@@ -552,7 +529,7 @@ export default function Dashboard() {
                                             return (
                                                 <tr
                                                     key={idx}
-                                                    className={`border-b transition-colors ${isDark ? 'border-gray-800 hover:bg-[#1e293b]' : 'border-gray-100 hover:bg-gray-50'}`}
+                                                    className={`border-b transition-colors ${isDark ? 'border-[#2d3340] hover:bg-[#262b36]' : 'border-gray-100 hover:bg-gray-50'}`}
                                                 >
                                                     {/* Employee */}
                                                     <td className="px-6 py-3">
@@ -610,7 +587,7 @@ export default function Dashboard() {
                         </div>
 
                         {/* Footer */}
-                        <div className={`px-6 py-3 text-xs border-t ${isDark ? 'text-gray-500 border-gray-700 bg-[#0b1120]' : 'text-gray-400 border-gray-200 bg-gray-50'}`}>
+                        <div className={`px-6 py-3 text-xs border-t ${isDark ? 'text-gray-500 border-[#2d3340] bg-[#15171e]' : 'text-gray-400 border-gray-200 bg-gray-50'}`}>
                             Showing {metricModal.items.length} record{metricModal.items.length !== 1 ? 's' : ''} — click outside or × to dismiss
                         </div>
                     </div>
