@@ -1,4 +1,4 @@
-# 🛡️ InThreatDetection
+﻿# InThreatDetection
 
 > **An AI-driven Security Operations Center (SOC) platform** that combines behavioral analytics, statistical anomaly detection, and post-quantum cryptography to detect insider threats and protect critical administrative systems in real time.
 
@@ -10,7 +10,7 @@
 
 ---
 
-## 📑 Table of Contents
+## Table of Contents
 
 1. [Introduction & Problem Statement](#1-introduction--problem-statement)
 2. [System Architecture Overview](#2-system-architecture-overview)
@@ -31,7 +31,7 @@
 
 Modern organizations face a growing and often underestimated threat from within: **insider threats**. Malicious or compromised employees with privileged access can exfiltrate sensitive data, tamper with audit records, or abuse administrative systems — often going undetected for months.
 
-Traditional rule-based detection (e.g., "flag if download count > 10") fails against:
+Traditional rule-based detection fails against:
 - **Low-and-slow attack patterns** — gradual privilege escalation over weeks
 - **Role-aware evasion** — using legitimate credentials to perform unusual actions
 - **After-hours intrusions** — exploiting access outside normal working hours
@@ -39,11 +39,11 @@ Traditional rule-based detection (e.g., "flag if download count > 10") fails aga
 
 **InThreatDetection** addresses these threats with a full-stack, AI-assisted SOC platform that:
 
-- 🔍 **Continuously profiles** employee behavior using statistical anomaly detection
-- 🚨 **Auto-generates alerts** when suspicious patterns are detected, every 60 seconds
-- 🔐 **Cryptographically seals** every activity record using quantum-safe algorithms to prevent log tampering
-- 📊 **Provides a real-time dashboard** for SOC operators to investigate, acknowledge, and respond to threats
-- 🤖 **Leverages Google Gemini AI** to generate detailed forensic analysis reports on demand
+- Continuously profiles employee behavior using statistical anomaly detection
+- Auto-generates alerts when suspicious patterns are detected, every 60 seconds
+- Cryptographically seals every activity record using quantum-safe algorithms to prevent log tampering
+- Provides a real-time dashboard for SOC operators to investigate, acknowledge, and respond to threats
+- Leverages Google Gemini AI to generate detailed forensic analysis reports on demand
 
 ---
 
@@ -51,98 +51,92 @@ Traditional rule-based detection (e.g., "flag if download count > 10") fails aga
 
 InThreatDetection is organized as two independently run applications communicating over a REST API, backed by a MongoDB database.
 
-```
-InThreatDetection/
-├── backend/                  ← FastAPI Python server
-│   └── app/
-│       ├── core/             # Configuration (settings, env)
-│       ├── database/         # MongoDB connection management
-│       ├── models/           # Pydantic data models
-│       ├── routers/          # API route definitions
-│       └── services/         # Business logic
-│           ├── activity_service.py    # Activity logging
-│           ├── alert_service.py       # Alert persistence
-│           ├── anomaly_engine.py      # ML anomaly detection
-│           ├── integrity.py           # Data integrity verification
-│           ├── quantum_crypto.py      # Post-quantum crypto engine
-│           └── risk_engine.py         # Risk score calculator
-│
-└── frontend/                 ← React + Vite SPA
-    └── src/
-        ├── ai/               # Gemini AI integration
-        ├── components/       # Shared UI components
-        │   ├── EncryptionIndicator.jsx
-        │   ├── IntegrityBadge.jsx
-        │   ├── QuantumShield.jsx
-        │   └── Sidebar.jsx
-        ├── pages/            # Application views
-        │   ├── Dashboard.jsx      # Admin SOC dashboard
-        │   ├── LandingPage.jsx    # Public landing page
-        │   └── Simulator.jsx      # Employee activity simulator
-        └── services/         # API client layer
+### Application Structure
+
+```mermaid
+graph LR
+    subgraph Backend["Backend (FastAPI + Python)"]
+        direction TB
+        A[app/core] --> B[app/database]
+        B --> C[app/models]
+        C --> D[app/routers]
+        D --> E[app/services]
+        E --> E1[activity_service]
+        E --> E2[anomaly_engine]
+        E --> E3[quantum_crypto]
+        E --> E4[risk_engine]
+        E --> E5[integrity]
+    end
+
+    subgraph Frontend["Frontend (React + Vite)"]
+        direction TB
+        F[src/pages] --> F1[Dashboard.jsx]
+        F --> F2[Simulator.jsx]
+        F --> F3[LandingPage.jsx]
+        G[src/components] --> G1[QuantumShield.jsx]
+        G --> G2[IntegrityBadge.jsx]
+        G --> G3[EncryptionIndicator.jsx]
+    end
+
+    Frontend -->|REST API calls| Backend
+    Backend -->|JSON responses| Frontend
 ```
 
 ### Data Flow
 
-```
-Employee Simulator ──POST activity──► FastAPI Backend
-                                           │
-                              ┌────────────▼────────────────┐
-                              │  Risk Engine  →  Risk Score  │
-                              │  Quantum Engine → SHA3+AES   │
-                              │  MongoDB ← Encrypted Record  │
-                              └────────────┬────────────────┘
-                                           │ (every 60 seconds)
-                              ┌────────────▼─────────────────┐
-                              │  Anomaly Engine (background)  │
-                              │  - Velocity Burst Detection   │
-                              │  - Role Mismatch Detection    │
-                              │  - Cumulative Risk Scoring    │
-                              │  - Off-Hours Detection        │
-                              │  - Action Frequency Analysis  │
-                              │  - API Traffic Spike Analysis │
-                              └────────────┬─────────────────┘
-                                           │
-                              ┌────────────▼──────────────┐
-                              │  SOC Dashboard (React)     │
-                              │  - Real-time alerts        │
-                              │  - Activity timeline       │
-                              │  - Gemini AI forensics     │
-                              │  - Quantum integrity view  │
-                              └───────────────────────────┘
+```mermaid
+flowchart TD
+    A([Employee Simulator]) -->|POST activity| B[FastAPI Backend]
+    B --> C[Risk Engine]
+    C --> D{Risk Score}
+    D --> E[Quantum Crypto Engine]
+    E -->|AES-256-GCM + SHA3-256| F[(MongoDB)]
+    F -->|Every 60 seconds| G[Anomaly Engine - Background Task]
+    G --> G1[Signal 1: Velocity Burst]
+    G --> G2[Signal 2: Role Mismatch]
+    G --> G3[Signal 3: Cumulative Risk]
+    G --> G4[Signal 4: Off-Hours]
+    G --> G5[Signal 5: Z-Score Frequency]
+    G --> G6[Signal 6: API Traffic Spike]
+    G1 & G2 & G3 & G4 & G5 & G6 -->|Persist anomaly alerts| F
+    F -->|GET activities, alerts| H[SOC Dashboard]
+    H --> H1[Real-time Activity Feed]
+    H --> H2[Anomaly Alert Management]
+    H --> H3[Gemini AI Forensic Reports]
+    H --> H4[Quantum Integrity Panel]
 ```
 
 ---
 
 ## 3. Key Features
 
-### 🧠 Intelligent Threat Detection
+### Intelligent Threat Detection
 - **6-signal statistical anomaly engine** that runs autonomously every 60 seconds
 - **Zero ML framework dependency** — pure Python stdlib (`math`, `collections`, `datetime`) for portability
 - Detects velocity bursts, role mismatches, off-hours access, cumulative risk accumulation, action frequency spikes, and API traffic anomalies
 
-### 🔐 Quantum-Safe Data Integrity
+### Quantum-Safe Data Integrity
 - Every activity and alert record is **hashed with SHA3-256** and **encrypted with AES-256-GCM**
 - Digital signatures using **Dilithium-3 (ML-DSA)** simulation (FIPS 204 aligned)
 - Key encapsulation via **Kyber-1024 (ML-KEM)** simulation (FIPS 203 aligned)
 - **Blockchain-style chaining**: each record's hash includes the previous record's hash, making retroactive tampering detectable
 
-### 🤖 AI-Powered Forensic Reports
+### AI-Powered Forensic Reports
 - On-demand **Google Gemini AI** analysis of any suspicious employee's activity history
 - Generates structured forensic reports with threat assessments, indicators of compromise, and remediation recommendations
 
-### 📊 Real-Time SOC Dashboard
+### Real-Time SOC Dashboard
 - Live activity feed with per-action risk scores
 - Color-coded alert severity visualization (Critical / High / Warning / Normal)
 - Anomaly alert management with acknowledgement workflow
 - Quantum crypto engine status monitor
 - Data integrity verification panel with per-collection scores
 
-### 🎮 Employee Activity Simulator
+### Employee Activity Simulator
 - Web-based interface for employees to simulate actions (login, file access, USB connect, etc.)
 - Useful for testing detection rules and training SOC analysts
 
-### 🔑 Role-Aware Access Control
+### Role-Aware Access Control
 - JWT-based authentication for administrators
 - Separate login flow for employees (simulator access)
 - All sensitive endpoints protected by admin-only guards
@@ -153,11 +147,30 @@ Employee Simulator ──POST activity──► FastAPI Backend
 
 The engine (`anomaly_engine.py`) runs as a **background task every 60 seconds**. It analyzes the last 24 hours of employee activity data and fires alerts for the following anomaly types:
 
+```mermaid
+graph TD
+    A[Anomaly Engine - runs every 60s] --> B[Fetch last 24h activities]
+    B --> C[Signal 1: Velocity Burst]
+    B --> D[Signal 2: Role Mismatch]
+    B --> E[Signal 3: Cumulative Risk]
+    B --> F[Signal 4: Off-Hours Access]
+    B --> G[Signal 5: Z-Score Frequency]
+    B --> H[Signal 6: API Traffic Spike]
+
+    C -->|3+ high-risk actions in 60s| I{Generate Alert}
+    D -->|Action outside role permissions| I
+    E -->|Score > 120 pts in 24h| I
+    F -->|Activity between 22:00-06:00| I
+    G -->|Z-score > 2.0 vs group mean| I
+    H -->|30+ API calls in 15 minutes| I
+
+    I --> J[(MongoDB - anomaly_alerts)]
+```
+
 ### Signal 1 — Velocity Burst Detector
 Detects when an employee performs **3 or more high-risk actions within a 60-second window**.
 
-High-risk actions tracked:
-`DOWNLOAD_CONFIDENTIAL`, `DELETE_FILE`, `CHANGE_PERMISSION`, `USB_CONNECTED`, `FAILED_LOGIN`
+High-risk actions tracked: `DOWNLOAD_CONFIDENTIAL`, `DELETE_FILE`, `CHANGE_PERMISSION`, `USB_CONNECTED`, `FAILED_LOGIN`
 
 ### Signal 2 — Role-Action Mismatch Detector
 Each role has a defined set of **permitted actions**. Any action outside this set raises a `ROLE_MISMATCH` alert.
@@ -178,7 +191,7 @@ Computes a **rolling risk score** for each employee over the last 24 hours. If t
 Flags any login or high-risk activity occurring between **22:00 and 06:00** local time.
 
 ### Signal 5 — Action Frequency Analyzer (Z-Score)
-Uses statistical z-score analysis to detect when any employee's action count deviates significantly (**z > 2.0**) from the group mean — identifying outliers who may be performing unusually high volumes of activity.
+Uses statistical z-score analysis to detect when any employee's action count deviates significantly (**z > 2.0**) from the group mean — identifying outliers performing unusually high volumes of activity.
 
 ### Signal 6 — API Traffic Spike Detector
 Monitors raw API access logs over a 15-minute sliding window. Flags users making **30+ API calls** in this window, which may indicate scripted or automated exfiltration.
@@ -202,19 +215,29 @@ The `QuantumCryptoEngine` is initialized at server startup and secures every dat
 
 ### Integrity Chain
 
+```mermaid
+flowchart LR
+    A[Activity Record] -->|SHA3-256 hash| B[sha3_hash]
+    A -->|Hash of previous record| C[prev_hash]
+    A -->|Dilithium-3 sign| D[signature]
+    A -->|AES-256-GCM encrypt| E[ciphertext + nonce + tag]
+    B & C & D & E --> F[(MongoDB)]
+    F -->|Re-compute & compare| G[Integrity Verify Endpoint]
+    G -->|Mismatch detected| H[Tamper Alert]
+    G -->|All match| I[Chain Intact]
+```
+
 Records are stored with:
 - `sha3_hash` — SHA3-256 hash of the record payload
 - `prev_hash` — SHA3-256 hash of the previous record (chain link)
 - `signature` — Dilithium-3 digital signature bytes (hex)
 - `ciphertext`, `nonce`, `tag` — AES-256-GCM encrypted payload bundle
 
-The `/api/quantum/integrity/verify` endpoint re-computes hashes for every record and compares against stored values, detecting any database-level tampering.
-
 ---
 
 ## 6. Technology Stack
 
-### ⚙️ Backend
+### Backend
 
 | Technology | Purpose |
 |------------|---------|
@@ -228,7 +251,7 @@ The `/api/quantum/integrity/verify` endpoint re-computes hashes for every record
 | PyJWT | JWT authentication |
 | python-dotenv | Environment configuration |
 
-### 🎨 Frontend
+### Frontend
 
 | Technology | Purpose |
 |------------|---------|
@@ -323,12 +346,21 @@ Each logged activity is assigned a **static risk weight** by the risk engine. We
 
 ### Alert Severity Thresholds
 
+```mermaid
+graph LR
+    A[Cumulative Score] --> B{Threshold}
+    B -->|>= 80| C["Critical"]
+    B -->|60 - 79| D["High"]
+    B -->|30 - 59| E["Warning"]
+    B -->|< 30| F["Normal"]
+```
+
 | Cumulative Score | Severity Level |
 |:----------------:|:--------------:|
-| ≥ 80 | 🔴 Critical |
-| 60 – 79 | 🟠 High |
-| 30 – 59 | 🟡 Warning |
-| < 30 | 🟢 Normal |
+| >= 80 | Critical |
+| 60 - 79 | High |
+| 30 - 59 | Warning |
+| < 30 | Normal |
 
 ---
 
@@ -336,61 +368,61 @@ Each logged activity is assigned a **static risk weight** by the risk engine. We
 
 ```
 InThreatDetection-main/
-├── README.md
-├── LICENSE
-└── InThreatDetection/
-    ├── .gitignore
-    ├── requirements.txt           # Root-level deps (pycryptodome)
-    │
-    ├── backend/
-    │   ├── .env                   # Environment variables (git-ignored)
-    │   ├── requirements.txt       # Backend Python dependencies
-    │   └── app/
-    │       ├── main.py            # FastAPI app entry point + middleware
-    │       ├── core/
-    │       │   └── config.py      # Settings (reads .env)
-    │       ├── database/
-    │       │   └── mongodb.py     # Motor async MongoDB client
-    │       ├── models/
-    │       │   ├── activity.py    # Activity & ActionType models
-    │       │   ├── alert.py       # Alert model
-    │       │   ├── anomaly.py     # AnomalyAlert, AnomalyType, Severity
-    │       │   └── employee.py    # Employee model
-    │       ├── routers/
-    │       │   ├── activities.py  # POST /api/activities/
-    │       │   ├── anomaly.py     # /api/anomaly/*
-    │       │   ├── auth.py        # POST /api/auth/login
-    │       │   ├── dashboard.py   # GET /api/dashboard/*
-    │       │   ├── employees.py   # /api/employees/*
-    │       │   └── quantum.py     # /api/quantum/*
-    │       └── services/
-    │           ├── activity_service.py   # Activity persistence
-    │           ├── alert_service.py      # Alert persistence
-    │           ├── anomaly_engine.py     # 6-signal anomaly detection
-    │           ├── integrity.py          # Hash chain verification
-    │           ├── quantum_crypto.py     # AES-256-GCM + SHA3 engine
-    │           └── risk_engine.py        # Risk weight calculator
-    │
-    └── frontend/
-        ├── index.html
-        ├── package.json
-        ├── vite.config.js
-        ├── tailwind.config.js
-        └── src/
-            ├── App.jsx            # Root component + routing
-            ├── main.jsx           # React entry point
-            ├── ai/                # Gemini AI prompt logic
-            ├── components/
-            │   ├── EncryptionIndicator.jsx
-            │   ├── IntegrityBadge.jsx
-            │   ├── QuantumShield.jsx
-            │   └── Sidebar.jsx
-            ├── pages/
-            │   ├── Dashboard.jsx      # Main SOC dashboard
-            │   ├── LandingPage.jsx    # Marketing landing page
-            │   └── Simulator.jsx      # Employee action simulator
-            └── services/
-                └── api.js             # Axios API client
+|-- README.md
+|-- LICENSE
++-- InThreatDetection/
+    |-- .gitignore
+    |-- requirements.txt           # Root-level deps (pycryptodome)
+    |
+    |-- backend/
+    |   |-- .env                   # Environment variables (git-ignored)
+    |   |-- requirements.txt       # Backend Python dependencies
+    |   +-- app/
+    |       |-- main.py            # FastAPI app entry point + middleware
+    |       |-- core/
+    |       |   +-- config.py      # Settings (reads .env)
+    |       |-- database/
+    |       |   +-- mongodb.py     # Motor async MongoDB client
+    |       |-- models/
+    |       |   |-- activity.py    # Activity & ActionType models
+    |       |   |-- alert.py       # Alert model
+    |       |   |-- anomaly.py     # AnomalyAlert, AnomalyType, Severity
+    |       |   +-- employee.py    # Employee model
+    |       |-- routers/
+    |       |   |-- activities.py  # POST /api/activities/
+    |       |   |-- anomaly.py     # /api/anomaly/*
+    |       |   |-- auth.py        # POST /api/auth/login
+    |       |   |-- dashboard.py   # GET /api/dashboard/*
+    |       |   |-- employees.py   # /api/employees/*
+    |       |   +-- quantum.py     # /api/quantum/*
+    |       +-- services/
+    |           |-- activity_service.py   # Activity persistence
+    |           |-- alert_service.py      # Alert persistence
+    |           |-- anomaly_engine.py     # 6-signal anomaly detection
+    |           |-- integrity.py          # Hash chain verification
+    |           |-- quantum_crypto.py     # AES-256-GCM + SHA3 engine
+    |           +-- risk_engine.py        # Risk weight calculator
+    |
+    +-- frontend/
+        |-- index.html
+        |-- package.json
+        |-- vite.config.js
+        |-- tailwind.config.js
+        +-- src/
+            |-- App.jsx            # Root component + routing
+            |-- main.jsx           # React entry point
+            |-- ai/                # Gemini AI prompt logic
+            |-- components/
+            |   |-- EncryptionIndicator.jsx
+            |   |-- IntegrityBadge.jsx
+            |   |-- QuantumShield.jsx
+            |   +-- Sidebar.jsx
+            |-- pages/
+            |   |-- Dashboard.jsx      # Main SOC dashboard
+            |   |-- LandingPage.jsx    # Marketing landing page
+            |   +-- Simulator.jsx      # Employee action simulator
+            +-- services/
+                +-- api.js             # Axios API client
 ```
 
 ---
@@ -536,7 +568,7 @@ http://localhost:5173
 | Username | `admin` |
 | Password | `admin123` |
 
-> ⚠️ Change these credentials before any non-development deployment.
+> **Warning:** Change these credentials before any non-development deployment.
 
 ---
 
@@ -558,6 +590,6 @@ It showcases the integration of AI-driven anomaly detection with post-quantum cr
 
 **Built with passion for the next generation of Security Operations Centers**
 
-*Insider Threat Detection · Behavioral Analytics · Quantum-Safe Security*
+*Insider Threat Detection - Behavioral Analytics - Quantum-Safe Security*
 
 </div>
