@@ -1,0 +1,19 @@
+.\backend\app\main.py:23: print(f"🔍 Auto-Scan Complete: {len(alerts)} anomalies detected, {inserted} new alerts persisted.")
+.\backend\app\main.py:25: print(f"❌ Auto-Scan Error: {str(e)}")
+.\backend\app\routers\activities.py:13: print(f"❌ Error logged in router: {str(e)}")
+.\backend\app\services\alert_service.py:52: print(f"🚨 ALERT GENERATED: [{level.value}] Action: {action_str} by {employee_id} (Score: {risk_score}) [🔐 Quantum Secured]")
+.\frontend\src\App.jsx:284: <h3 className={`font-bold text-sm ${isDark ? 'text-white' : 'text-gray-800'}`}>🛡️ Anomaly Alerts</h3>
+.\frontend\src\components\IntegrityBadge.jsx:16: icon: '✅',
+.\frontend\src\components\IntegrityBadge.jsx:24: icon: '🚨',
+.\frontend\src\components\IntegrityBadge.jsx:32: icon: '⚠️',
+.\frontend\src\components\QuantumShield.jsx:92: 🛡️ Quantum Shield — {getStatusLabel()}
+.\frontend\src\components\QuantumShield.jsx:156: <p className={`text-[10px] uppercase tracking-wider font-semibold ${textSecondary}`}>Verified ✅</p>
+.\frontend\src\components\QuantumShield.jsx:160: <p className={`text-[10px] uppercase tracking-wider font-semibold ${textSecondary}`}>Tampered 🚨</p>
+.\frontend\src\components\QuantumShield.jsx:164: <p className={`text-[10px] uppercase tracking-wider font-semibold ${textSecondary}`}>Unverified ⚠️</p>
+.\frontend\src\components\QuantumShield.jsx:187: {collection === 'activities' ? '📋 Activities' : '🚨 Alerts'}
+.\frontend\src\components\QuantumShield.jsx:266: ⚠️ {error}
+.\frontend\src\pages\Dashboard.jsx:366: <p className="text-gray-500 text-xs uppercase tracking-wider font-semibold">🔒 Integrity Score</p>
+.\frontend\src\pages\Dashboard.jsx:612: <p className="text-4xl mb-3">✅</p>
+.\frontend\src\pages\LandingPage.jsx:13: icon: '🔍',
+.\frontend\src\pages\LandingPage.jsx:18: icon: '🛡️',
+.\frontend\src\pages\LandingPage.jsx:28: icon: '⚡',

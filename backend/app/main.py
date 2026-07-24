@@ -27,7 +27,7 @@ async def periodic_anomaly_scan():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await connect_to_mongo()
-    # Initialize the Quantum Crypto Engine at startup
+    # Initialize the Quantum Crypto Engine at startup 
     quantum_engine.initialize()
     # Start the periodic anomaly scan
     scan_task = asyncio.create_task(periodic_anomaly_scan())
