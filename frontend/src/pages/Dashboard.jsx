@@ -46,6 +46,7 @@ export default function Dashboard({ isDark, anomalyAlerts = [], onAnomalyRefresh
     
     // UI State
     const [selectedUser, setSelectedUser] = useState(null);
+    const [isAnomalyExpanded, setIsAnomalyExpanded] = useState(true);
     
     // AI State
     const [aiLoading, setAiLoading] = useState(false);
@@ -188,9 +189,15 @@ export default function Dashboard({ isDark, anomalyAlerts = [], onAnomalyRefresh
                 {anomalyAlerts && anomalyAlerts.filter(a => a.status === 'OPEN').length > 0 && (
                     <div className="mb-6">
                         <div className="flex items-center justify-between mb-3">
-                            <h2 className={`text-sm font-bold uppercase tracking-wider flex items-center space-x-2 ${isDark ? 'text-red-400' : 'text-red-600'}`}>
+                            <h2 
+                                className={`text-sm font-bold uppercase tracking-wider flex items-center space-x-2 cursor-pointer select-none ${isDark ? 'text-red-400' : 'text-red-600'}`}
+                                onClick={() => setIsAnomalyExpanded(!isAnomalyExpanded)}
+                            >
                                 <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
                                 <span>Anomaly Intelligence ({anomalyAlerts.filter(a => a.status === 'OPEN').length} Active)</span>
+                                <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 transition-transform duration-300 ${isAnomalyExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                </svg>
                             </h2>
                             <button
                                 onClick={async () => {
@@ -205,40 +212,81 @@ export default function Dashboard({ isDark, anomalyAlerts = [], onAnomalyRefresh
                                 <span>Run ML Scan</span>
                             </button>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                            {anomalyAlerts.filter(a => a.status === 'OPEN').slice(0, 6).map((alert) => {
-                                const sevBg = alert.severity === 'Critical' ? (isDark ? 'border-red-500/40 bg-red-500/5' : 'border-red-300 bg-red-50') 
-                                            : alert.severity === 'High' ? (isDark ? 'border-orange-500/40 bg-orange-500/5' : 'border-orange-300 bg-orange-50')
-                                            : (isDark ? 'border-yellow-500/40 bg-yellow-500/5' : 'border-yellow-300 bg-yellow-50');
-                                const sevDot = alert.severity === 'Critical' ? 'bg-red-500' : alert.severity === 'High' ? 'bg-orange-500' : 'bg-yellow-500';
-                                const sevText = alert.severity === 'Critical' ? (isDark ? 'text-red-400' : 'text-red-600') 
-                                              : alert.severity === 'High' ? (isDark ? 'text-orange-400' : 'text-orange-600') 
-                                              : (isDark ? 'text-yellow-400' : 'text-yellow-600');
-                                return (
-                                    <div key={alert._id} className={`rounded-lg border p-4 transition-all hover:shadow-md ${sevBg}`}>
-                                        <div className="flex items-center justify-between mb-2">
-                                            <div className="flex items-center space-x-2">
-                                                <span className={`w-2 h-2 rounded-full ${sevDot}`}></span>
-                                                <span className={`text-xs font-black uppercase tracking-wider ${sevText}`}>{alert.severity}</span>
+                        
+                        {isAnomalyExpanded && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {(() => {
+                                const openAlerts = anomalyAlerts.filter(a => a.status === 'OPEN');
+                                const alertsByEmployee = openAlerts.reduce((acc, alert) => {
+                                    if (!acc[alert.employee_id]) {
+                                        acc[alert.employee_id] = {
+                                            employee_id: alert.employee_id,
+                                            employee_name: alert.employee_name,
+                                            role: alert.role,
+                                            alerts: [],
+                                            highest_severity: 'Warning',
+                                            max_confidence: alert.confidence
+                                        };
+                                    }
+                                    acc[alert.employee_id].alerts.push(alert);
+                                    acc[alert.employee_id].max_confidence = Math.max(acc[alert.employee_id].max_confidence, alert.confidence);
+                                    return acc;
+                                }, {});
+
+                                const groupedAlerts = Object.values(alertsByEmployee).map(emp => {
+                                    const hasCritical = emp.alerts.some(a => a.severity === 'Critical');
+                                    const hasHigh = emp.alerts.some(a => a.severity === 'High');
+                                    emp.highest_severity = hasCritical ? 'Critical' : (hasHigh ? 'High' : 'Warning');
+                                    return emp;
+                                }).sort((a, b) => {
+                                    const sevScore = { Critical: 3, High: 2, Warning: 1 };
+                                    return sevScore[b.highest_severity] - sevScore[a.highest_severity];
+                                }).slice(0, 6);
+
+                                return groupedAlerts.map((emp) => {
+                                    const sevBg = emp.highest_severity === 'Critical' ? (isDark ? 'border-red-500/40 bg-red-500/5' : 'border-red-300 bg-red-50') 
+                                                : emp.highest_severity === 'High' ? (isDark ? 'border-orange-500/40 bg-orange-500/5' : 'border-orange-300 bg-orange-50')
+                                                : (isDark ? 'border-yellow-500/40 bg-yellow-500/5' : 'border-yellow-300 bg-yellow-50');
+                                    const sevDot = emp.highest_severity === 'Critical' ? 'bg-red-500' : emp.highest_severity === 'High' ? 'bg-orange-500' : 'bg-yellow-500';
+                                    const sevText = emp.highest_severity === 'Critical' ? (isDark ? 'text-red-400' : 'text-red-600') 
+                                                  : emp.highest_severity === 'High' ? (isDark ? 'text-orange-400' : 'text-orange-600') 
+                                                  : (isDark ? 'text-yellow-400' : 'text-yellow-600');
+                                    return (
+                                        <div key={emp.employee_id} className={`rounded-lg border p-4 transition-all hover:shadow-md ${sevBg} flex flex-col`}>
+                                            <div className="flex items-center justify-between mb-2">
+                                                <div className="flex items-center space-x-2">
+                                                    <span className={`w-2 h-2 rounded-full ${sevDot}`}></span>
+                                                    <span className={`text-xs font-black uppercase tracking-wider ${sevText}`}>{emp.highest_severity}</span>
+                                                </div>
+                                                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${isDark ? 'bg-[#15171e] text-gray-400' : 'bg-gray-100 text-gray-500'}`}>Max Conf {emp.max_confidence}%</span>
                                             </div>
-                                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${isDark ? 'bg-[#15171e] text-gray-400' : 'bg-gray-100 text-gray-500'}`}>{alert.confidence}%</span>
+                                            <h4 className={`text-sm font-bold mb-1 ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>{emp.employee_name}</h4>
+                                            <p className={`text-[10px] uppercase tracking-wider mb-2 font-semibold ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>{emp.employee_id} · {emp.role}</p>
+                                            
+                                            <div className="flex-1">
+                                                <p className={`text-xs mb-1.5 font-bold ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{emp.alerts.length} Active {emp.alerts.length === 1 ? 'Anomaly' : 'Anomalies'}:</p>
+                                                <ul className={`text-[11px] list-disc pl-4 space-y-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                                    {emp.alerts.map(a => (
+                                                        <li key={a._id}><span className="font-semibold">{a.anomaly_type}</span>: <span className="line-clamp-1 text-[10px]">{a.description}</span></li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+
+                                            <button
+                                                onClick={() => {
+                                                    const matchedUser = aggregatedUsers.find(u => u.id === emp.employee_id);
+                                                    if (matchedUser) setSelectedUser(matchedUser);
+                                                }}
+                                                className={`mt-4 text-[11px] font-bold transition self-start ${isDark ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-500'}`}
+                                            >
+                                                Investigate User →
+                                            </button>
                                         </div>
-                                        <h4 className={`text-sm font-bold mb-1 ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>{alert.employee_name}</h4>
-                                        <p className={`text-[10px] uppercase tracking-wider mb-1.5 font-semibold ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>{alert.employee_id} · {alert.role} · {alert.anomaly_type}</p>
-                                        <p className={`text-xs leading-relaxed line-clamp-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{alert.description}</p>
-                                        <button
-                                            onClick={() => {
-                                                const matchedUser = aggregatedUsers.find(u => u.id === alert.employee_id);
-                                                if (matchedUser) setSelectedUser(matchedUser);
-                                            }}
-                                            className={`mt-2 text-[11px] font-bold transition ${isDark ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-500'}`}
-                                        >
-                                            Investigate →
-                                        </button>
-                                    </div>
-                                );
-                            })}
+                                    );
+                                });
+                            })()}
                         </div>
+                        )}
                     </div>
                 )}
 
