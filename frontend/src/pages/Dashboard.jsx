@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { getActivities, getAlerts, getEmployees } from '../services/api';
+import { triggerAnomalyScan } from '../services/api';
 import { generateReport } from '../ai/reportGenerator';
 import QuantumShield from '../components/QuantumShield';
 import IntegrityBadge from '../components/IntegrityBadge';
@@ -36,7 +37,7 @@ function formatActionString(actionStr) {
     return actionStr.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
 }
 
-export default function Dashboard({ isDark }) {
+export default function Dashboard({ isDark, anomalyAlerts = [], onAnomalyRefresh }) {
     // Core State
     const [activities, setActivities] = useState([]);
     const [alerts, setAlerts] = useState([]);
@@ -182,7 +183,65 @@ export default function Dashboard({ isDark }) {
             </div>
 
             <div className={`border-x border-b rounded-b-md shadow-sm p-6 mb-8 transition-colors duration-300 ${tableBg}`}>
-                
+
+                {/* ── Anomaly Intelligence Panel ──────────────────── */}
+                {anomalyAlerts && anomalyAlerts.filter(a => a.status === 'OPEN').length > 0 && (
+                    <div className="mb-6">
+                        <div className="flex items-center justify-between mb-3">
+                            <h2 className={`text-sm font-bold uppercase tracking-wider flex items-center space-x-2 ${isDark ? 'text-red-400' : 'text-red-600'}`}>
+                                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                                <span>Anomaly Intelligence ({anomalyAlerts.filter(a => a.status === 'OPEN').length} Active)</span>
+                            </h2>
+                            <button
+                                onClick={async () => {
+                                    try {
+                                        await triggerAnomalyScan();
+                                        if (onAnomalyRefresh) await onAnomalyRefresh();
+                                    } catch (e) { console.error(e); }
+                                }}
+                                className="text-xs font-bold text-blue-500 hover:text-blue-400 transition flex items-center space-x-1"
+                            >
+                                <span>⟳</span>
+                                <span>Run ML Scan</span>
+                            </button>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {anomalyAlerts.filter(a => a.status === 'OPEN').slice(0, 6).map((alert) => {
+                                const sevBg = alert.severity === 'Critical' ? (isDark ? 'border-red-500/40 bg-red-500/5' : 'border-red-300 bg-red-50') 
+                                            : alert.severity === 'High' ? (isDark ? 'border-orange-500/40 bg-orange-500/5' : 'border-orange-300 bg-orange-50')
+                                            : (isDark ? 'border-yellow-500/40 bg-yellow-500/5' : 'border-yellow-300 bg-yellow-50');
+                                const sevDot = alert.severity === 'Critical' ? 'bg-red-500' : alert.severity === 'High' ? 'bg-orange-500' : 'bg-yellow-500';
+                                const sevText = alert.severity === 'Critical' ? (isDark ? 'text-red-400' : 'text-red-600') 
+                                              : alert.severity === 'High' ? (isDark ? 'text-orange-400' : 'text-orange-600') 
+                                              : (isDark ? 'text-yellow-400' : 'text-yellow-600');
+                                return (
+                                    <div key={alert._id} className={`rounded-lg border p-4 transition-all hover:shadow-md ${sevBg}`}>
+                                        <div className="flex items-center justify-between mb-2">
+                                            <div className="flex items-center space-x-2">
+                                                <span className={`w-2 h-2 rounded-full ${sevDot}`}></span>
+                                                <span className={`text-xs font-black uppercase tracking-wider ${sevText}`}>{alert.severity}</span>
+                                            </div>
+                                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${isDark ? 'bg-[#15171e] text-gray-400' : 'bg-gray-100 text-gray-500'}`}>{alert.confidence}%</span>
+                                        </div>
+                                        <h4 className={`text-sm font-bold mb-1 ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>{alert.employee_name}</h4>
+                                        <p className={`text-[10px] uppercase tracking-wider mb-1.5 font-semibold ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>{alert.employee_id} · {alert.role} · {alert.anomaly_type}</p>
+                                        <p className={`text-xs leading-relaxed line-clamp-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{alert.description}</p>
+                                        <button
+                                            onClick={() => {
+                                                const matchedUser = aggregatedUsers.find(u => u.id === alert.employee_id);
+                                                if (matchedUser) setSelectedUser(matchedUser);
+                                            }}
+                                            className={`mt-2 text-[11px] font-bold transition ${isDark ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-500'}`}
+                                        >
+                                            Investigate →
+                                        </button>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+
                 {/* 6-Column Metrics Grid */}
                 <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
 

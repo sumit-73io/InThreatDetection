@@ -83,3 +83,23 @@ export const runIntegrityVerification = async () => {
     const response = await api.get('/quantum/integrity/verify', getAuthHeaders());
     return response.data;
 };
+
+// ─── Anomaly Detection APIs ─────────────────────────────────────────
+
+// Fetch all anomaly alerts
+export const getAnomalyAlerts = async () => {
+    const response = await api.get('/anomaly/alerts', getAuthHeaders());
+    return response.data;
+};
+
+// Trigger a full anomaly scan
+export const triggerAnomalyScan = async () => {
+    const response = await api.post('/anomaly/scan', {}, getAuthHeaders());
+    return response.data;
+};
+
+// Acknowledge (dismiss) an anomaly alert
+export const acknowledgeAnomalyAlert = async (alertId) => {
+    const response = await api.patch(`/anomaly/alerts/${alertId}/acknowledge`, {}, getAuthHeaders());
+    return response.data;
+};
