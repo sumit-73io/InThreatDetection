@@ -1,2 +1,0 @@
-Make the AI/ML  (Anomaly Intelligence) dashboard collapsable section which can be viewed by dropdown and the placement of the Anomaly Intelligence should be below 
-In  all login forms add hide and show password shown with eye button, Improve the provisional user form to have header for the text fields
