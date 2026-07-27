@@ -4,15 +4,16 @@ import { getQuantumStatus } from '../services/api';
 /**
  * EncryptionIndicator — Navbar-level indicator showing quantum encryption status.
  * 
- * Shows a lock icon with "PQC: Active/Inactive" label.
- * Clicking it can optionally trigger expansion of the full QuantumShield panel.
+ * Shows a lock icon with a "PQC: Active/Inactive" label. Status only - the
+ * cryptographic configuration is withheld by policy (see
+ * backend/app/routers/quantum.py). Full posture lives on the Quantum
+ * Security page.
  * 
  * Props:
- *   - onTogglePanel: callback to toggle the QuantumShield panel visibility
+ *   - onTogglePanel: optional click handler
  */
 export default function EncryptionIndicator({ onTogglePanel }) {
     const [isActive, setIsActive] = useState(false);
-    const [fingerprint, setFingerprint] = useState('');
     const [hover, setHover] = useState(false);
 
     useEffect(() => {
@@ -20,7 +21,6 @@ export default function EncryptionIndicator({ onTogglePanel }) {
             try {
                 const status = await getQuantumStatus();
                 setIsActive(status?.status === 'active');
-                setFingerprint(status?.key_fingerprint || '');
             } catch {
                 setIsActive(false);
             }
@@ -43,7 +43,9 @@ export default function EncryptionIndicator({ onTogglePanel }) {
                     : 'bg-red-500/10 text-red-400 border-red-500/30 hover:bg-red-500/20'
                 }
             `}
-            title={isActive ? `PQC Active — Key: ${fingerprint}` : 'Quantum encryption is not active'}
+            title={isActive
+                ? 'Post-quantum encryption is active'
+                : 'Post-quantum encryption is not active'}
         >
             {/* Lock Icon */}
             <div className="relative">

@@ -1,1 +1,84 @@
 @import "tailwindcss";
+
+/* ─── Dark mode strategy ──────────────────────────────────────────────
+   Tailwind v4 resolves `dark:` from `prefers-color-scheme` by default, which
+   would ignore the in-app toggle. Re-point the variant at a `dark` class on
+   <html> (stamped by ThemeContext) so the toggle is authoritative.
+
+   NOTE: this project is on Tailwind v4 via @tailwindcss/vite. The
+   tailwind.config.js at the repo root is NOT read — configuration is CSS-first
+   and belongs in this file.
+------------------------------------------------------------------------ */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ─── Design tokens ───────────────────────────────────────────────────
+   Risk/status semantics shared by charts, badges and gauges, so new
+   components stop re-deriving hex codes inline.
+
+   `static` so the custom properties are always emitted. Without it Tailwind
+   tree-shakes any token that no utility class references, and the hand-rolled
+   SVG charts read these via var() in fill/stroke attributes rather than
+   through utility classes.
+------------------------------------------------------------------------ */
+@theme static {
+    --color-risk-low: #10b981;
+    --color-risk-medium: #f59e0b;
+    --color-risk-high: #ef4444;
+    --color-risk-critical: #b91c1c;
+    --color-accent: #3b82f6;
+    --color-accent-alt: #6366f1;
+}
+
+/* Surface/border/text values extracted from the palette already used across
+   Dashboard, App and the AI Twin page. */
+:root {
+    --surface-page: #f8f9fa;
+    --surface-card: #ffffff;
+    --surface-inset: #f3f4f6;
+    --surface-hover: #f9fafb;
+    --border-subtle: #e5e7eb;
+    --border-strong: #d1d5db;
+    --text-primary: #1f2937;
+    --text-secondary: #6b7280;
+    --text-muted: #9ca3af;
+}
+
+.dark {
+    --surface-page: #15171e;
+    --surface-card: #1e222b;
+    --surface-inset: #0b0d12;
+    --surface-hover: #262b36;
+    --border-subtle: #2d3340;
+    --border-strong: #3b4252;
+    --text-primary: #e5e7eb;
+    --text-secondary: #9ca3af;
+    --text-muted: #6b7280;
+}
+
+/* ─── Base ────────────────────────────────────────────────────────────
+   Paint the page from the token set so the area behind the React root (and
+   any overscroll gutter) matches the active theme instead of flashing white.
+------------------------------------------------------------------------ */
+html {
+    background-color: var(--surface-page);
+}
+
+body {
+    background-color: var(--surface-page);
+    color: var(--text-primary);
+    transition: background-color 300ms ease, color 300ms ease;
+}
+
+/* Respect operators who have asked the OS to reduce motion. The console leans
+   on pulse/ping animations for alerting, which is exactly the kind of thing
+   that needs to be suppressible. */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}

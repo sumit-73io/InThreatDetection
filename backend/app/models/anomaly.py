@@ -11,6 +11,7 @@ class AnomalyType(str, Enum):
     ACTION_SPIKE = "Action Frequency Spike"
     CUMULATIVE_RISK = "Cumulative Risk Threshold"
     API_TRAFFIC_SPIKE = "API Traffic Spike"
+    ML_OUTLIER = "Unsupervised ML Outlier"
 
 
 class AnomalySeverity(str, Enum):

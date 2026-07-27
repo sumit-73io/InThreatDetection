@@ -69,16 +69,47 @@ class QuantumCryptoEngine:
         self._startup_time = datetime.now(timezone.utc)
         self._initialized = True
 
-        print(f"🔐 Quantum Crypto Engine initialized")
-        print(f"   Algorithm Suite: Kyber-1024 + AES-256-GCM + SHA3-256 + Dilithium-3")
-        print(f"   Key Fingerprint: {self._key_fingerprint}")
+        # Data minimization: the algorithm suite and key fingerprint are
+        # deliberately NOT logged. Process logs are widely readable and a key
+        # fingerprint is a stable identifier for the session key.
+        print("Quantum Crypto Engine initialized")
 
     @property
     def is_initialized(self) -> bool:
         return self._initialized
 
+    def get_posture(self) -> dict:
+        """
+        Minimized status view - the ONLY crypto status exposed over the API.
+
+        Data minimization ("quantum proofing"): callers learn whether each
+        subsystem is operational and nothing more. Specifically withheld:
+        algorithm names and versions, the session key fingerprint, key strength,
+        operation counts and session establishment time. Those describe the
+        cryptographic configuration, which is exactly what an attacker
+        fingerprints before choosing an approach.
+
+        `get_status()` retains the full detail for in-process diagnostics only
+        and must not be returned from a route.
+        """
+        active = self._initialized
+        return {
+            "status": "active" if active else "inactive",
+            "subsystems": [
+                {"name": "Key Encapsulation", "status": "Active" if active else "Inactive"},
+                {"name": "Payload Encryption", "status": "Active" if active else "Inactive"},
+                {"name": "Integrity Hashing", "status": "Active" if active else "Inactive"},
+                {"name": "Digital Signatures", "status": "Active" if active else "Inactive"},
+            ],
+            "quantum_resistant": active,
+        }
+
     def get_status(self) -> dict:
-        """Return the current status of the crypto engine."""
+        """
+        Full diagnostic status. INTERNAL USE ONLY - never return this from an
+        API route; it exposes the algorithm suite and key fingerprint. Use
+        `get_posture()` for anything that reaches a client.
+        """
         if not self._initialized:
             return {"status": "inactive", "message": "Engine not initialized"}
 

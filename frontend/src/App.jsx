@@ -2,14 +2,25 @@ import React, { useState, useEffect, useRef } from 'react';
 import Simulator from './pages/Simulator';
 import Dashboard from './pages/Dashboard';
 import LandingPage from './pages/LandingPage';
+import AiTwinPage from './pages/AiTwinPage';
+import QuantumPage from './pages/QuantumPage';
 import { loginAdmin, createEmployee, getAnomalyAlerts, triggerAnomalyScan, acknowledgeAnomalyAlert } from './services/api';
 import EncryptionIndicator from './components/EncryptionIndicator';
+import * as Icon from './components/Icons';
+import { useTheme } from './contexts/ThemeContext';
+import { useAuth } from './contexts/AuthContext';
 
 function App() {
   // appPhase controls the high-level flow: 'landing' → 'login' → 'app'
   const [appPhase, setAppPhase] = useState('loading'); // start with 'loading' to avoid flash
   const [currentView, setCurrentView] = useState('dashboard');
-  const [isDark, setIsDark] = useState(true);
+  // Theme lives in ThemeContext so it survives reloads and can follow the OS.
+  // `isDark` is still threaded down as a prop, which keeps the existing
+  // conditional-class components working untouched.
+  const { isDark, toggleTheme } = useTheme();
+  // Identity and effective permissions drive which navigation entries and
+  // privileged controls are rendered. The server enforces the same rules.
+  const { can, role, displayName, refresh: refreshAuth } = useAuth();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showProvisionModal, setShowProvisionModal] = useState(false);
   
@@ -70,10 +81,15 @@ function App() {
     try {
       const data = await loginAdmin(username, password);
       localStorage.setItem('InthreatDetection_token', data.access_token);
+      // Pull identity/permissions immediately rather than waiting for the
+      // AuthProvider's poll, so the sidebar renders correctly on first paint.
+      await refreshAuth();
       setAppPhase('app');
       setCurrentView('dashboard');
     } catch (err) {
-      setAuthError('Access Denied. Invalid credentials.');
+      setAuthError(
+        err?.response?.data?.detail || 'Access Denied. Invalid credentials.'
+      );
     }
   };
 
@@ -83,6 +99,9 @@ function App() {
     setIsSidebarOpen(false);
     setUsername('');
     setPassword('');
+    // Clear the cached principal so a subsequent login cannot briefly render
+    // the previous operator's permissions.
+    refreshAuth();
   };
 
   const renderProvisionModal = () => {
@@ -168,7 +187,7 @@ function App() {
   // ─── PHASE: Loading (prevents flash of wrong content) ──────────
   if (appPhase === 'loading') {
     return (
-      <div className="min-h-screen bg-[#0b0d12] flex items-center justify-center">
+      <div className={`min-h-screen flex items-center justify-center ${isDark ? 'bg-[#0b0d12]' : 'bg-[#f8f9fa]'}`}>
         <div className="text-blue-500 animate-pulse font-bold tracking-widest">INITIALIZING...</div>
       </div>
     );
@@ -182,18 +201,29 @@ function App() {
   // ─── PHASE: Login Screen ──────────────────────────────────────
   if (appPhase === 'login') {
     return (
-      <div className="min-h-screen bg-[#0b0d12] flex flex-col justify-center items-center font-sans relative overflow-hidden">
+      <div className={`min-h-screen flex flex-col justify-center items-center font-sans relative overflow-hidden transition-colors duration-300 ${isDark ? 'bg-[#0b0d12]' : 'bg-[#f8f9fa]'}`}>
         {/* Background glow */}
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[400px] bg-blue-600/8 rounded-full blur-[100px] pointer-events-none"></div>
-        
-        <div className="relative z-10 bg-[#1e222b] p-8 rounded-xl border border-[#2d3340] shadow-2xl w-96 text-center">
+
+        {/* Theme toggle — available before sign-in so the operator is not forced
+            through the login screen in the wrong theme. */}
+        <button
+          onClick={toggleTheme}
+          aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+          title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+          className={`absolute top-5 right-5 z-20 p-2 rounded-full transition ${isDark ? 'text-gray-400 hover:bg-[#2d3340] hover:text-white' : 'text-gray-500 hover:bg-gray-200 hover:text-gray-900'}`}
+        >
+          {isDark ? <Icon.Sun className="w-5 h-5" /> : <Icon.Moon className="w-5 h-5" />}
+        </button>
+
+        <div className={`relative z-10 p-8 rounded-xl border shadow-2xl w-96 text-center transition-colors duration-300 ${isDark ? 'bg-[#1e222b] border-[#2d3340]' : 'bg-white border-gray-200'}`}>
             <div className="flex items-center justify-center space-x-2 mb-2">
               <div className="bg-blue-600 text-white font-black text-xs tracking-wider flex items-center justify-center w-7 h-7 rounded-md shadow-lg shadow-blue-600/20">
                 ID
               </div>
-              <h1 className="text-2xl font-black tracking-wider text-white">InThreat<span className="text-blue-500">Detection</span></h1>
+              <h1 className={`text-2xl font-black tracking-wider ${isDark ? 'text-white' : 'text-gray-900'}`}>InThreat<span className="text-blue-500">Detection</span></h1>
             </div>
-            <p className="text-gray-500 text-sm mb-6">Restricted SOC Access</p>
+            <p className={`text-sm mb-6 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>Restricted SOC Access</p>
             
             {authError && <div className="bg-red-500/10 border border-red-500/50 text-red-400 text-xs py-2 rounded mb-4">{authError}</div>}
             
@@ -203,7 +233,7 @@ function App() {
                     placeholder="Admin Username" 
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    className="w-full bg-[#15171e] border border-[#2d3340] rounded-lg px-4 py-2.5 text-white outline-none focus:border-blue-500 transition-colors"
+                    className={`w-full border rounded-lg px-4 py-2.5 outline-none focus:border-blue-500 transition-colors ${isDark ? 'bg-[#15171e] border-[#2d3340] text-white' : 'bg-gray-50 border-gray-300 text-gray-900'}`}
                 />
                 <div className="relative">
                     <input 
@@ -211,7 +241,7 @@ function App() {
                         placeholder="Password" 
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
-                        className="w-full bg-[#15171e] border border-[#2d3340] rounded-lg px-4 py-2.5 pr-12 text-white outline-none focus:border-blue-500 transition-colors"
+                        className={`w-full border rounded-lg px-4 py-2.5 pr-12 outline-none focus:border-blue-500 transition-colors ${isDark ? 'bg-[#15171e] border-[#2d3340] text-white' : 'bg-gray-50 border-gray-300 text-gray-900'}`}
                     />
                     <button 
                         type="button"
@@ -235,8 +265,8 @@ function App() {
                 </button>
             </form>
             <button 
-                onClick={() => setAppPhase('landing')} 
-                className="mt-6 text-gray-500 hover:text-gray-300 text-xs underline transition-colors"
+                onClick={() => setAppPhase('landing')}
+                className={`mt-6 text-xs underline transition-colors ${isDark ? 'text-gray-500 hover:text-gray-300' : 'text-gray-500 hover:text-gray-800'}`}
             >
                 ← Back to Home
             </button>
@@ -281,7 +311,10 @@ function App() {
             {showNotifPanel && (
               <div className={`absolute right-0 top-12 w-96 max-h-[70vh] overflow-y-auto rounded-xl shadow-2xl border z-50 ${isDark ? 'bg-[#1e222b] border-[#2d3340]' : 'bg-white border-gray-200'}`}>
                 <div className={`px-4 py-3 border-b flex justify-between items-center ${isDark ? 'border-[#2d3340]' : 'border-gray-200'}`}>
-                  <h3 className={`font-bold text-sm ${isDark ? 'text-white' : 'text-gray-800'}`}>🛡️ Anomaly Alerts</h3>
+                  <h3 className={`font-bold text-sm flex items-center gap-2 ${isDark ? 'text-white' : 'text-gray-800'}`}>
+                    <Icon.Shield className="w-4 h-4 text-blue-500" />
+                    Anomaly Alerts
+                  </h3>
                   <button 
                     onClick={async () => { try { await triggerAnomalyScan(); const data = await getAnomalyAlerts(); setAnomalyAlerts(data); } catch(e){} }}
                     className="text-xs font-bold text-blue-500 hover:text-blue-400 transition"
@@ -321,8 +354,13 @@ function App() {
             )}
           </div>
           {/* Theme Toggle */}
-          <button onClick={() => setIsDark(!isDark)} className={`p-2 rounded-full transition ${isDark ? 'text-gray-400 hover:bg-[#2d3340] hover:text-white' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'}`} title="Toggle Theme">
-            {isDark ? '☀️' : '🌙'}
+          <button
+            onClick={toggleTheme}
+            aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+            title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+            className={`p-2 rounded-full transition ${isDark ? 'text-gray-400 hover:bg-[#2d3340] hover:text-white' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'}`}
+          >
+            {isDark ? <Icon.Sun className="w-5 h-5" /> : <Icon.Moon className="w-5 h-5" />}
           </button>
         </div>
       </nav>
@@ -350,7 +388,14 @@ function App() {
             {/* Sidebar Drawer */}
             <div className={`fixed top-0 left-0 h-full w-72 shadow-2xl z-50 transform transition-transform duration-300 flex flex-col ${isDark ? 'bg-[#1e222b] border-r border-[#2d3340]' : 'bg-white border-r border-gray-200'}`}>
               <div className={`px-6 py-5 flex justify-between items-center border-b ${isDark ? 'border-[#2d3340]' : 'border-gray-200'}`}>
-                <h3 className={`font-black tracking-widest text-sm uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Navigation</h3>
+                <div>
+                  <h3 className={`font-black tracking-widest text-sm uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Navigation</h3>
+                  {role && (
+                    <p className={`text-[10px] mt-0.5 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                      {displayName} &middot; <span className="font-bold text-blue-500">{role}</span>
+                    </p>
+                  )}
+                </div>
                 <button onClick={() => setIsSidebarOpen(false)} className={`text-2xl leading-none transition ${isDark ? 'text-gray-400 hover:text-white' : 'text-gray-500 hover:text-gray-900'}`}>&times;</button>
               </div>
 
@@ -359,26 +404,52 @@ function App() {
                   onClick={() => { setCurrentView('dashboard'); setIsSidebarOpen(false); }}
                   className={`text-left px-4 py-3 rounded-lg font-bold transition-colors flex items-center space-x-3 ${currentView === 'dashboard' ? 'bg-blue-600 text-white shadow-md' : (isDark ? 'text-gray-300 hover:bg-[#2d3340] hover:text-white' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900')}`}
                 >
-                  <span>📊</span>
+                  <Icon.Dashboard className="w-5 h-5 shrink-0" />
                   <span>SOC Terminal</span>
                 </button>
                 <button 
                   onClick={() => { setCurrentView('simulator'); setIsSidebarOpen(false); }}
                   className={`text-left px-4 py-3 rounded-lg font-bold transition-colors flex items-center space-x-3 ${currentView === 'simulator' ? 'bg-blue-600 text-white shadow-md' : (isDark ? 'text-gray-300 hover:bg-[#2d3340] hover:text-white' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900')}`}
                 >
-                  <span>🧑‍💻</span>
+                  <Icon.Terminal className="w-5 h-5 shrink-0" />
                   <span>Employee Simulator</span>
                 </button>
                 
+                {can('aitwin:read') && (
+                <button 
+                  onClick={() => { setCurrentView('ai-twin'); setIsSidebarOpen(false); }}
+                  className={`text-left px-4 py-3 rounded-lg font-bold transition-colors flex items-center space-x-3 ${currentView === 'ai-twin' ? 'text-white shadow-md' : (isDark ? 'text-gray-300 hover:bg-[#2d3340] hover:text-white' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900')}`}
+                  style={currentView === 'ai-twin' ? { background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)' } : {}}
+                >
+                  <Icon.Brain className="w-5 h-5 shrink-0" />
+                  <span>AI Twin Engine</span>
+                  {currentView !== 'ai-twin' && (
+                    <span className="ml-auto text-xs font-black px-1.5 py-0.5 rounded" style={{ background: 'rgba(99,102,241,0.2)', color: '#818cf8' }}>NEW</span>
+                  )}
+                </button>
+                )}
+
+                {can('quantum:read') && (
+                <button
+                  onClick={() => { setCurrentView('quantum'); setIsSidebarOpen(false); }}
+                  className={`text-left px-4 py-3 rounded-lg font-bold transition-colors flex items-center space-x-3 ${currentView === 'quantum' ? 'bg-blue-600 text-white shadow-md' : (isDark ? 'text-gray-300 hover:bg-[#2d3340] hover:text-white' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900')}`}
+                >
+                  <Icon.ShieldCheck className="w-5 h-5 shrink-0" />
+                  <span>Quantum Security</span>
+                </button>
+                )}
+
                 <div className={`my-4 border-t ${isDark ? 'border-[#2d3340]' : 'border-gray-200'}`}></div>
                 
+                {can('employees:create') && (
                 <button 
                   onClick={() => { setShowProvisionModal(true); setIsSidebarOpen(false); }}
                   className={`text-left px-4 py-3 rounded-lg font-bold transition-colors flex items-center space-x-3 ${isDark ? 'text-gray-300 hover:bg-[#2d3340] hover:text-white' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'}`}
                 >
-                  <span className="text-blue-500 text-xl leading-none">+</span>
+                  <Icon.Plus className="w-5 h-5 shrink-0 text-blue-500" />
                   <span>Provision User</span>
                 </button>
+                )}
               </div>
 
               <div className={`p-4 border-t ${isDark ? 'border-[#2d3340]' : 'border-gray-200'}`}>
@@ -386,7 +457,7 @@ function App() {
                   onClick={() => { handleLogout(); setIsSidebarOpen(false); }} 
                   className={`w-full text-left px-4 py-3 rounded-lg font-bold transition-colors flex items-center space-x-3 ${isDark ? 'text-red-400 hover:bg-red-500/10 hover:text-red-300' : 'text-red-600 hover:bg-red-50'}`}
                 >
-                  <span>🚪</span>
+                  <Icon.Logout className="w-5 h-5 shrink-0" />
                   <span>Secure Logout</span>
                 </button>
               </div>
@@ -396,7 +467,10 @@ function App() {
 
         {/* View Rendering */}
         <div className={`flex-1 flex flex-col transition-all duration-300 ${currentView === 'dashboard' ? 'pl-16' : ''}`}>
-          {currentView === 'dashboard' ? <Dashboard isDark={isDark} anomalyAlerts={anomalyAlerts} onAnomalyRefresh={async () => { try { const data = await getAnomalyAlerts(); setAnomalyAlerts(data); } catch(e){} }} /> : <Simulator />}
+          {currentView === 'dashboard' && <Dashboard isDark={isDark} anomalyAlerts={anomalyAlerts} onAnomalyRefresh={async () => { try { const data = await getAnomalyAlerts(); setAnomalyAlerts(data); } catch(e){} }} />}
+          {currentView === 'simulator' && <Simulator isDark={isDark} />}
+          {currentView === 'ai-twin' && <AiTwinPage isDark={isDark} />}
+          {currentView === 'quantum' && <QuantumPage isDark={isDark} />}
         </div>
       </main>
 

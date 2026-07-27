@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends
-from app.routers.auth import verify_admin
+from app.core.rbac import Permission
+from app.core.security import require_permission
 from app.database.mongodb import db_instance
 from app.services.anomaly_engine import run_anomaly_scan, persist_anomaly_alerts
 from bson import ObjectId
@@ -7,7 +8,7 @@ from bson import ObjectId
 router = APIRouter(prefix="/api/anomaly", tags=["Anomaly Detection"])
 
 
-@router.post("/scan", dependencies=[Depends(verify_admin)])
+@router.post("/scan", dependencies=[Depends(require_permission(Permission.ANOMALY_SCAN))])
 async def trigger_anomaly_scan():
     """Run a full anomaly scan across all employees and persist new alerts."""
     try:
@@ -23,7 +24,7 @@ async def trigger_anomaly_scan():
         raise HTTPException(status_code=500, detail=f"Anomaly scan failed: {str(e)}")
 
 
-@router.get("/alerts", dependencies=[Depends(verify_admin)])
+@router.get("/alerts", dependencies=[Depends(require_permission(Permission.ANOMALY_READ))])
 async def get_anomaly_alerts():
     """Fetch all anomaly alerts, newest first."""
     try:
@@ -36,7 +37,7 @@ async def get_anomaly_alerts():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.patch("/alerts/{alert_id}/acknowledge", dependencies=[Depends(verify_admin)])
+@router.patch("/alerts/{alert_id}/acknowledge", dependencies=[Depends(require_permission(Permission.ANOMALY_READ))])
 async def acknowledge_alert(alert_id: str):
     """Mark an anomaly alert as acknowledged."""
     try:

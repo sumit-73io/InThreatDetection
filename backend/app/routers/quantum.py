@@ -2,48 +2,60 @@
 Quantum Security API Router
 ============================
 
-Provides endpoints for monitoring the quantum crypto engine status
-and running data integrity verification scans.
+Reports the operational posture of the quantum crypto engine and the
+tamper-evidence health of the audit collections.
+
+Data minimization policy
+------------------------
+This router deliberately exposes STATUS ONLY. It does not return:
+  - algorithm names, versions or NIST suite identifiers
+  - the session key fingerprint or any key material
+  - per-document integrity hashes
+
+Rationale: the platform's value here is the assurance that records are sealed
+and verifiable. The cryptographic configuration itself is reconnaissance
+material, and a per-document hash is a stable identifier for a specific audit
+record. Aggregate verified/tampered counts are retained because a SOC operator
+genuinely needs to know whether the audit trail is intact.
+
+The engine's full detail remains available in-process via
+`quantum_engine.get_status()` for diagnostics, and must not be returned here.
+
+The encrypt-test / decrypt-test demo endpoints were removed: they echoed the
+algorithm suite and acted as an encryption oracle against the live session key.
 """
 
-from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel
-from typing import Optional
-from app.routers.auth import verify_admin
-from app.services.quantum_crypto import quantum_engine
+from fastapi import APIRouter, Depends, HTTPException
+
+from app.core.rbac import Permission
+from app.core.security import require_permission
 from app.services.integrity import verify_collection_integrity
+from app.services.quantum_crypto import quantum_engine
 
 router = APIRouter(prefix="/api/quantum", tags=["Quantum Security"])
 
 
-# ─── Response Models ─────────────────────────────────────────────────
-
-class EncryptTestRequest(BaseModel):
-    plaintext: str
-
-
-class DecryptTestRequest(BaseModel):
-    ciphertext: str
-    nonce: str
-    tag: str
-    sha3_hash: Optional[str] = None
-    signature: Optional[str] = None
+def _summarise(result: dict) -> dict:
+    """Aggregate counts for one collection, with per-document detail stripped."""
+    return {
+        "total": result["total_documents"],
+        "verified": result["verified"],
+        "tampered": result["tampered"],
+        "unverified": result["unverified"],
+        "integrity_score": result["integrity_score"],
+        "chain_intact": result["chain_intact"],
+    }
 
 
-# ─── Endpoints ───────────────────────────────────────────────────────
-
-@router.get("/status", dependencies=[Depends(verify_admin)])
-async def get_quantum_status():
-    """Returns the current status of the Quantum Crypto Engine."""
-    return quantum_engine.get_status()
+@router.get("/status", dependencies=[Depends(require_permission(Permission.QUANTUM_READ))])
+async def get_quantum_posture():
+    """Operational posture of the crypto engine. Status only, no configuration."""
+    return quantum_engine.get_posture()
 
 
-@router.get("/integrity/stats", dependencies=[Depends(verify_admin)])
+@router.get("/integrity/stats", dependencies=[Depends(require_permission(Permission.QUANTUM_READ))])
 async def get_integrity_stats():
-    """
-    Returns aggregate integrity statistics for both
-    activities and alerts collections.
-    """
+    """Aggregate tamper-evidence statistics across the audit collections."""
     try:
         activities_result = await verify_collection_integrity("activities")
         alerts_result = await verify_collection_integrity("alerts")
@@ -64,76 +76,33 @@ async def get_integrity_stats():
                 "integrity_score": overall_score,
                 "chain_intact": activities_result["chain_intact"] and alerts_result["chain_intact"],
             },
-            "activities": {
-                "total": activities_result["total_documents"],
-                "verified": activities_result["verified"],
-                "tampered": activities_result["tampered"],
-                "unverified": activities_result["unverified"],
-                "integrity_score": activities_result["integrity_score"],
-                "chain_intact": activities_result["chain_intact"],
-            },
-            "alerts": {
-                "total": alerts_result["total_documents"],
-                "verified": alerts_result["verified"],
-                "tampered": alerts_result["tampered"],
-                "unverified": alerts_result["unverified"],
-                "integrity_score": alerts_result["integrity_score"],
-                "chain_intact": alerts_result["chain_intact"],
-            },
+            "activities": _summarise(activities_result),
+            "alerts": _summarise(alerts_result),
             "scan_timestamp": activities_result["scan_timestamp"],
-            "engine_status": quantum_engine.get_status()
+            # Minimized posture rather than the full engine status.
+            "engine_status": quantum_engine.get_posture(),
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Integrity scan failed: {str(e)}")
 
 
-@router.get("/integrity/verify", dependencies=[Depends(verify_admin)])
+@router.get("/integrity/verify", dependencies=[Depends(require_permission(Permission.QUANTUM_READ))])
 async def run_full_integrity_verification():
     """
-    Runs a full integrity verification scan on all collections.
-    Returns per-document verification results.
+    Run a full verification pass over the audit collections.
+
+    Returns aggregate results per collection. Per-document hashes are withheld;
+    when tampering is detected the operator gets the affected count and is
+    directed to the activity timeline rather than raw hash values.
     """
     try:
         activities_result = await verify_collection_integrity("activities")
         alerts_result = await verify_collection_integrity("alerts")
 
         return {
-            "activities": activities_result,
-            "alerts": alerts_result,
+            "activities": _summarise(activities_result),
+            "alerts": _summarise(alerts_result),
+            "scan_timestamp": activities_result["scan_timestamp"],
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Verification failed: {str(e)}")
-
-
-@router.post("/encrypt-test", dependencies=[Depends(verify_admin)])
-async def encrypt_test_payload(req: EncryptTestRequest):
-    """Encrypts a test plaintext string for demonstration."""
-    try:
-        encrypted = quantum_engine.encrypt_payload({"test_data": req.plaintext})
-        return {
-            "status": "encrypted",
-            "result": encrypted,
-            "algorithm_suite": quantum_engine.ALGORITHM_SUITE
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Encryption failed: {str(e)}")
-
-
-@router.post("/decrypt-test", dependencies=[Depends(verify_admin)])
-async def decrypt_test_payload(req: DecryptTestRequest):
-    """Decrypts a test payload for demonstration."""
-    try:
-        encrypted_bundle = {
-            "ciphertext": req.ciphertext,
-            "nonce": req.nonce,
-            "tag": req.tag,
-            "sha3_hash": req.sha3_hash,
-            "signature": req.signature
-        }
-        decrypted = quantum_engine.decrypt_payload(encrypted_bundle)
-        return {
-            "status": "decrypted",
-            "result": decrypted
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Decryption failed: {str(e)}")

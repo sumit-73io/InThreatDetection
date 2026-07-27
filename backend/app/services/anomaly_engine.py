@@ -330,6 +330,53 @@ def _detect_api_spikes(api_logs_by_employee, emp_map):
     return alerts
 
 
+async def _detect_ml_outliers():
+    """
+    Run the guarded unsupervised detector and convert its findings to alerts.
+
+    Fails soft on purpose: this is one detector among seven, and neither a
+    missing scikit-learn install nor a guard abstention should take down the
+    rule-based scan. An abstention produces no alerts by design - the guards
+    exist precisely so the model stays quiet when the data cannot support a
+    conclusion.
+    """
+    alerts = []
+    try:
+        from app.services import ml_unsupervised
+
+        result = await ml_unsupervised.run_detection(hours=168)
+
+        if result.get("status") != "fitted":
+            # Abstained. Log which guard fired so the reason is visible, and
+            # emit nothing - silence here means "insufficient evidence".
+            print(
+                f"ML detector abstained [{result.get('guard')}]: "
+                f"{result.get('message', '')[:160]}"
+            )
+            return []
+
+        for finding in result.get("findings", []):
+            alerts.append(AnomalyAlert(
+                employee_id=finding["employee_id"],
+                employee_name=finding["employee_name"],
+                role=finding["role"],
+                anomaly_type=AnomalyType.ML_OUTLIER,
+                severity=(
+                    AnomalySeverity.CRITICAL if finding["severity"] == "Critical"
+                    else AnomalySeverity.HIGH if finding["severity"] == "High"
+                    else AnomalySeverity.WARNING
+                ),
+                confidence=finding["confidence"],
+                description=finding["description"],
+            ))
+    except ImportError:
+        print("ML detector unavailable: scikit-learn is not installed.")
+    except Exception as exc:
+        print(f"ML detector error (rule-based scan continues): {exc}")
+
+    return alerts
+
+
 async def run_anomaly_scan():
     """
     Execute a full anomaly scan across all employees.
@@ -358,6 +405,9 @@ async def run_anomaly_scan():
     all_alerts.extend(_detect_action_spikes(activities_by_employee, emp_map))
     all_alerts.extend(_detect_cumulative_risk(activities_by_employee, emp_map))
     all_alerts.extend(_detect_api_spikes(api_logs_by_employee, emp_map))
+    # Learned detector, guarded against false learning. Contributes nothing
+    # when its guards abstain, which is the intended behaviour.
+    all_alerts.extend(await _detect_ml_outliers())
 
     # Deduplicate: one alert per (employee, anomaly_type) — keep highest severity
     seen = {}

@@ -1,9 +1,18 @@
 import React, { useEffect, useState } from 'react';
-import { getActivities, getAlerts, getEmployees } from '../services/api';
+import { getActivities, getAlerts, getEmployees, blockEmployee, unblockEmployee,
+         getActiveOverrides, revokeOverride } from '../services/api';
 import { triggerAnomalyScan } from '../services/api';
 import { generateReport } from '../ai/reportGenerator';
-import QuantumShield from '../components/QuantumShield';
 import IntegrityBadge from '../components/IntegrityBadge';
+import ElevationModal from '../components/ElevationModal';
+import OverrideModal from '../components/OverrideModal';
+import RiskCharts from '../components/RiskCharts';
+import * as Icon from '../components/Icons';
+import { useAuth } from '../contexts/AuthContext';
+
+// Privileged permission behind the manual block/unblock override.
+const BLOCK_PERMISSION = 'employees:block';
+const OVERRIDE_PERMISSION = 'overrides:manage';
 
 function timeAgo(dateParam) {
     if (!dateParam) return 'Unknown';
@@ -55,6 +64,24 @@ export default function Dashboard({ isDark, anomalyAlerts = [], onAnomalyRefresh
     // Metric Drill-Down State
     const [metricModal, setMetricModal] = useState(null); // { title, color, items, type }
 
+    // Block / override state
+    const [blockLoading, setBlockLoading] = useState(null); // employee_id in flight
+    const [blockError, setBlockError] = useState(null);
+    const [elevationPrompt, setElevationPrompt] = useState(null); // { permissions, reason }
+    const [overrideTarget, setOverrideTarget] = useState(null);   // employee row
+    const [activeOverrides, setActiveOverrides] = useState({});   // employee_id -> override
+
+    // Authorization: `can` decides whether the override is rendered at all,
+    // `isElevated` decides whether it is armed. Both are re-checked server-side.
+    const { can, isElevated, activeElevations, refresh: refreshAuth } = useAuth();
+    const mayBlock = can(BLOCK_PERMISSION);
+    const blockArmed = isElevated(BLOCK_PERMISSION);
+    const mayOverride = can(OVERRIDE_PERMISSION);
+    const overrideArmed = isElevated(OVERRIDE_PERMISSION);
+    const blockElevation = activeElevations.find(
+        (e) => (e.permissions || []).includes(BLOCK_PERMISSION)
+    );
+
     const fetchDashboardData = async () => {
         try {
             const actData = await getActivities();
@@ -65,13 +92,23 @@ export default function Dashboard({ isDark, anomalyAlerts = [], onAnomalyRefresh
             empData.forEach(emp => {
                 empMap[emp.employee_id] = {
                     role: emp.role,
-                    name: emp.name || 'Unknown Name'
+                    name: emp.name || 'Unknown Name',
+                    is_blocked: emp.is_blocked || false
                 };
             });
             
             setEmployeeDirectory(empMap);
             setActivities(actData);
             setAlerts(alertData);
+
+            // Live enforcement overrides, so the table can show which employees
+            // are operating under an authorised exception.
+            try {
+                const ov = await getActiveOverrides();
+                setActiveOverrides(ov.active || {});
+            } catch {
+                // Non-fatal: the table just won't badge overrides.
+            }
         } catch (err) {
             console.error("Failed to sync SOC feeds", err);
         } finally {
@@ -84,6 +121,89 @@ export default function Dashboard({ isDark, anomalyAlerts = [], onAnomalyRefresh
         const interval = setInterval(fetchDashboardData, 3000); 
         return () => clearInterval(interval);
     }, []);
+
+    /**
+     * Manual operator override: freeze or release an account.
+     *
+     * Privileged, so there are three outcomes rather than two:
+     *   - no elevation open  -> open the elevation dialog instead of calling
+     *   - elevation open     -> perform the action
+     *   - server still 403s  -> the window expired between render and click,
+     *                           so re-prompt rather than showing a raw error
+     */
+    const handleToggleBlock = async (employeeId, isCurrentlyBlocked, userName) => {
+        const verb = isCurrentlyBlocked ? 'unblock' : 'block';
+
+        if (!blockArmed) {
+            setElevationPrompt({
+                reason: `Manual ${verb} of ${userName || employeeId} from the SOC dashboard`,
+            });
+            return;
+        }
+
+        setBlockError(null);
+        setBlockLoading(employeeId);
+        try {
+            const reason = `Manual ${verb} by SOC operator from risk dashboard`;
+            if (isCurrentlyBlocked) {
+                await unblockEmployee(employeeId, reason);
+            } else {
+                await blockEmployee(employeeId, reason);
+            }
+            await fetchDashboardData();
+
+            if (selectedUser && selectedUser.id === employeeId) {
+                setSelectedUser(prev => ({ ...prev, is_blocked: !isCurrentlyBlocked }));
+            }
+        } catch (err) {
+            if (err?.response?.status === 403) {
+                // Elevation lapsed mid-interaction. Re-arm instead of erroring.
+                await refreshAuth();
+                setElevationPrompt({
+                    reason: `Manual ${verb} of ${userName || employeeId} from the SOC dashboard`,
+                });
+            } else {
+                setBlockError(
+                    err?.response?.data?.detail || `Failed to ${verb} ${employeeId}.`
+                );
+            }
+        } finally {
+            setBlockLoading(null);
+        }
+    };
+
+    /** Open the override dialog, elevating first if the window is closed. */
+    const handleAuthorizeException = (user) => {
+        if (!overrideArmed) {
+            setElevationPrompt({
+                permissions: [OVERRIDE_PERMISSION],
+                reason: `Authorise an enforcement exception for ${user.name || user.id}`,
+                then: () => setOverrideTarget(user),
+            });
+            return;
+        }
+        setOverrideTarget(user);
+    };
+
+    const handleRevokeOverride = async (user) => {
+        const ov = activeOverrides[user.id];
+        if (!ov) return;
+        if (!overrideArmed) {
+            setElevationPrompt({
+                permissions: [OVERRIDE_PERMISSION],
+                reason: `Revoke the enforcement exception for ${user.name || user.id}`,
+                then: () => handleRevokeOverride(user),
+            });
+            return;
+        }
+        setBlockError(null);
+        try {
+            await revokeOverride(ov.override_id, 'Revoked from the SOC risk dashboard');
+            await fetchDashboardData();
+        } catch (err) {
+            setBlockError(err?.response?.data?.detail || 'Failed to revoke the override.');
+        }
+    };
 
     const processUserData = () => {
         const usersMap = {};
@@ -98,7 +218,8 @@ export default function Dashboard({ isDark, anomalyAlerts = [], onAnomalyRefresh
                 lastActivityDate: null, 
                 lastAction: 'No Activity',
                 timeline: [],
-                integrityStatus: 'unverified'
+                integrityStatus: 'unverified',
+                is_blocked: employeeDirectory[empId].is_blocked
             };
         });
 
@@ -113,7 +234,8 @@ export default function Dashboard({ isDark, anomalyAlerts = [], onAnomalyRefresh
                     lastActivityDate: null,
                     lastAction: 'No Activity',
                     timeline: [],
-                    integrityStatus: 'unverified'
+                    integrityStatus: 'unverified',
+                    is_blocked: employeeDirectory[act.employee_id]?.is_blocked || false
                 };
             }
             
@@ -130,7 +252,6 @@ export default function Dashboard({ isDark, anomalyAlerts = [], onAnomalyRefresh
             if (!usersMap[act.employee_id].lastActivityDate || new Date(act.timestamp) > new Date(usersMap[act.employee_id].lastActivityDate)) {
                 usersMap[act.employee_id].lastActivityDate = act.timestamp;
                 usersMap[act.employee_id].lastAction = formatActionString(act.action);
-                usersMap[act.employee_id].lastIntegrityHash = act.integrity_hash_short;
                 usersMap[act.employee_id].lastIntegrityStatus = act.integrity_verified;
             }
         });
@@ -156,11 +277,11 @@ export default function Dashboard({ isDark, anomalyAlerts = [], onAnomalyRefresh
     const allowedEvents    = allowedEventItems.length;
     const usersMonitored   = aggregatedUsers.length;
 
-    // Integrity Metrics
-    const verifiedCount = activities.filter(a => a.integrity_verified === 'verified').length;
-    const integrityScore = totalEvents > 0 ? Math.round((verifiedCount / totalEvents) * 100) : 100;
+    // Integrity metrics now live on the Quantum Security page. The per-row
+    // IntegrityBadge stays here because record trustworthiness is relevant while
+    // investigating a specific user.
 
-    if (loading) return <div className="p-8 text-gray-500 font-medium bg-gray-950 min-h-screen">Loading Core Systems...</div>;
+    if (loading) return <div className={`p-8 font-medium min-h-screen ${isDark ? 'bg-[#15171e] text-gray-500' : 'bg-[#f8f9fa] text-gray-500'}`}>Loading Core Systems...</div>;
 
     // Theme Variables
     const themeBg = isDark ? "bg-[#15171e]" : "bg-[#f8f9fa]";
@@ -290,8 +411,9 @@ export default function Dashboard({ isDark, anomalyAlerts = [], onAnomalyRefresh
                     </div>
                 )}
 
-                {/* 6-Column Metrics Grid */}
-                <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
+                {/* 5-Column Metrics Grid — the Integrity Score card moved to the
+                    Quantum Security page along with the rest of the crypto posture. */}
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
 
                     {/* Total Events — clickable */}
                     <div
@@ -358,36 +480,68 @@ export default function Dashboard({ isDark, anomalyAlerts = [], onAnomalyRefresh
                         <p className={`text-3xl font-bold mb-1 ${isDark ? 'text-white' : 'text-gray-800'}`}>{usersMonitored}</p>
                         <p className="text-gray-500 text-xs uppercase tracking-wider font-semibold">Users Monitored</p>
                     </div>
-                    {/* NEW: Integrity Score Card */}
-                    <div className={`${cardBg} rounded-lg px-5 py-4 shadow-sm relative overflow-hidden`}>
-                        <p className={`text-3xl font-bold mb-1 ${integrityScore >= 95 ? 'text-emerald-400' : integrityScore >= 70 ? 'text-amber-400' : 'text-red-400'}`}>
-                            {integrityScore}%
-                        </p>
-                        <p className="text-gray-500 text-xs uppercase tracking-wider font-semibold">🔒 Integrity Score</p>
-                        {/* Subtle background glow */}
-                        <div className={`absolute inset-0 opacity-5 ${integrityScore >= 95 ? 'bg-emerald-400' : integrityScore >= 70 ? 'bg-amber-400' : 'bg-red-400'}`}></div>
-                    </div>
                 </div>
 
-                {/* Quantum Shield Panel */}
-                <QuantumShield isDark={isDark} />
+                {/* ── Risk analytics: charts + derived recommendations ─── */}
+                <RiskCharts isDark={isDark} activities={activities} users={aggregatedUsers} />
+
+                {/* ── Privileged access banner ─────────────────────────
+                    Only shown to operators who actually hold employees:block,
+                    so it does not advertise a capability others cannot use. */}
+                {mayBlock && (
+                    <div className={`mb-4 flex items-center justify-between gap-3 rounded-lg border px-4 py-2.5 ${
+                        blockArmed
+                            ? (isDark ? 'bg-amber-500/10 border-amber-500/30' : 'bg-amber-50 border-amber-300')
+                            : (isDark ? 'bg-[#15171e] border-[#2d3340]' : 'bg-gray-50 border-gray-200')
+                    }`}>
+                        <div className="flex items-center gap-2.5">
+                            <Icon.KeyRound className={`w-4 h-4 shrink-0 ${blockArmed ? 'text-amber-400' : (isDark ? 'text-gray-500' : 'text-gray-400')}`} />
+                            <div>
+                                <p className={`text-xs font-bold ${blockArmed ? 'text-amber-400' : (isDark ? 'text-gray-300' : 'text-gray-700')}`}>
+                                    {blockArmed ? 'Privileged access active' : 'Account override locked'}
+                                </p>
+                                <p className={`text-[11px] ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                                    {blockArmed
+                                        ? `Manual block/unblock is armed${blockElevation ? ` for ${Math.max(0, Math.floor((blockElevation.seconds_remaining || 0) / 60))}m ${(blockElevation.seconds_remaining || 0) % 60}s` : ''}.`
+                                        : 'Manual block/unblock requires a time-boxed PAM elevation.'}
+                                </p>
+                            </div>
+                        </div>
+                        {!blockArmed && (
+                            <button
+                                onClick={() => setElevationPrompt({ reason: 'Manual account override from the SOC risk dashboard' })}
+                                className="shrink-0 text-xs font-bold px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white transition"
+                            >
+                                Request Elevation
+                            </button>
+                        )}
+                    </div>
+                )}
+
+                {blockError && (
+                    <div className={`mb-4 flex items-start gap-2 rounded-lg border px-4 py-2.5 text-xs ${isDark ? 'bg-red-500/10 border-red-500/30 text-red-400' : 'bg-red-50 border-red-200 text-red-700'}`}>
+                        <Icon.Warning className="w-4 h-4 shrink-0 mt-px" />
+                        <span>{blockError}</span>
+                    </div>
+                )}
 
                 {/* Unified Table */}
                 <table className="w-full text-left border-collapse">
                     <thead>
                         <tr className={`border-b ${tableHeader}`}>
                             <th className="py-3 font-bold w-[14%]">User</th>
-                            <th className="py-3 font-bold w-[12%]">Role</th>
-                            <th className="py-3 font-bold w-[18%]">Risk Score</th>
-                            <th className="py-3 font-bold w-[10%]">Risk Level</th>
-                            <th className="py-3 font-bold w-[16%]">Last Action</th>
-                            <th className="py-3 font-bold w-[12%]">Integrity</th>
-                            <th className="py-3 font-bold text-right pr-4 w-[18%]">Last Activity</th>
+                            <th className="py-3 font-bold w-[11%]">Role</th>
+                            <th className="py-3 font-bold w-[16%]">Risk Score</th>
+                            <th className="py-3 font-bold w-[9%]">Risk Level</th>
+                            <th className="py-3 font-bold w-[14%]">Last Action</th>
+                            <th className="py-3 font-bold w-[11%]">Integrity</th>
+                            <th className="py-3 font-bold text-right pr-4 w-[15%]">Last Activity</th>
+                            {mayBlock && <th className="py-3 font-bold text-right w-[10%]">Access</th>}
                         </tr>
                     </thead>
                     <tbody>
                         {aggregatedUsers.length === 0 && (
-                            <tr><td colSpan="7" className="py-8 text-center text-gray-500 italic">No user activity recorded yet.</td></tr>
+                            <tr><td colSpan={mayBlock ? 8 : 7} className="py-8 text-center text-gray-500 italic">No user activity recorded yet.</td></tr>
                         )}
                         {aggregatedUsers.map((user) => (
                             <tr 
@@ -423,11 +577,83 @@ export default function Dashboard({ isDark, anomalyAlerts = [], onAnomalyRefresh
                                 <td className="py-4">
                                     <IntegrityBadge 
                                         status={user.lastIntegrityStatus || user.integrityStatus} 
-                                        hash={user.lastIntegrityHash}
                                         isDark={isDark}
                                     />
                                 </td>
                                 <td className={`py-4 text-sm text-right pr-4 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{timeAgo(user.lastActivityDate)}</td>
+
+                                {/* ── Manual override toggle ────────────────
+                                    Rendered only for holders of employees:block.
+                                    Disabled-looking until a PAM window is open;
+                                    clicking while locked opens the elevation
+                                    dialog rather than failing with a 403. */}
+                                {mayBlock && (
+                                    <td className="py-4 text-right" onClick={(e) => e.stopPropagation()}>
+                                        <button
+                                            onClick={() => handleToggleBlock(user.id, user.is_blocked, user.name)}
+                                            disabled={blockLoading === user.id}
+                                            title={
+                                                blockArmed
+                                                    ? (user.is_blocked ? 'Release this account' : 'Freeze this account for 24h')
+                                                    : 'Requires a PAM elevation window'
+                                            }
+                                            aria-label={`${user.is_blocked ? 'Unblock' : 'Block'} ${user.name}`}
+                                            className={`relative inline-flex items-center h-6 w-11 rounded-full transition-colors disabled:opacity-40 ${
+                                                user.is_blocked
+                                                    ? 'bg-red-500'
+                                                    : (isDark ? 'bg-[#3b4252]' : 'bg-gray-300')
+                                            } ${blockArmed ? 'cursor-pointer' : 'cursor-pointer opacity-60'}`}
+                                        >
+                                            <span
+                                                className={`inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform ${
+                                                    user.is_blocked ? 'translate-x-6' : 'translate-x-1'
+                                                }`}
+                                            />
+                                            {!blockArmed && (
+                                                <Icon.Lock className="absolute -right-4 top-1 w-3 h-3 text-amber-500" />
+                                            )}
+                                        </button>
+                                        <div className={`text-[10px] mt-1 font-bold ${user.is_blocked ? 'text-red-400' : (isDark ? 'text-gray-600' : 'text-gray-400')}`}>
+                                            {blockLoading === user.id
+                                                ? '...'
+                                                : user.is_blocked ? 'BLOCKED' : 'ACTIVE'}
+                                        </div>
+
+                                        {/* Authorised-exception state. Shown when an
+                                            override is live so an operator can see at a
+                                            glance that this account is deliberately
+                                            outside normal enforcement. */}
+                                        {mayOverride && (
+                                            activeOverrides[user.id] ? (
+                                                <button
+                                                    onClick={() => handleRevokeOverride(user)}
+                                                    title={
+                                                        `Override by ${activeOverrides[user.id].granted_by}: ` +
+                                                        `${activeOverrides[user.id].reason}\n` +
+                                                        `Actions: ${(activeOverrides[user.id].allowed_actions || []).join(', ')}\n` +
+                                                        `Click to revoke.`
+                                                    }
+                                                    className={`mt-1.5 inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded border transition ${isDark ? 'bg-amber-500/10 border-amber-500/40 text-amber-400 hover:bg-amber-500/20' : 'bg-amber-50 border-amber-300 text-amber-700 hover:bg-amber-100'}`}
+                                                >
+                                                    <Icon.ShieldCheck className="w-2.5 h-2.5" />
+                                                    {activeOverrides[user.id].events_remaining != null
+                                                        ? `OVR ${activeOverrides[user.id].events_remaining}e`
+                                                        : activeOverrides[user.id].seconds_remaining != null
+                                                            ? `OVR ${Math.ceil(activeOverrides[user.id].seconds_remaining / 60)}m`
+                                                            : 'OVR'}
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    onClick={() => handleAuthorizeException(user)}
+                                                    title="Authorise an exception to automated enforcement"
+                                                    className={`mt-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded border transition ${isDark ? 'border-[#2d3340] text-gray-500 hover:text-amber-400 hover:border-amber-500/40' : 'border-gray-300 text-gray-400 hover:text-amber-700 hover:border-amber-400'}`}
+                                                >
+                                                    + ALLOW
+                                                </button>
+                                            )
+                                        )}
+                                    </td>
+                                )}
                             </tr>
                         ))}
                     </tbody>
@@ -441,18 +667,65 @@ export default function Dashboard({ isDark, anomalyAlerts = [], onAnomalyRefresh
                         {/* Modal Header */}
                         <div className={`${headerBg} ${isDark ? 'text-white' : 'text-gray-800'} px-6 py-4 flex justify-between items-center`}>
                             <div>
-                                <h2 className="text-lg font-bold">Investigation: {selectedUser.name}</h2>
+                                <h2 className="text-lg font-bold flex items-center gap-2">
+                                    Investigation: {selectedUser.name}
+                                    {selectedUser.is_blocked && (
+                                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-500/20 text-red-500 border border-red-500/30">
+                                            BLOCKED
+                                        </span>
+                                    )}
+                                </h2>
                                 <p className={`text-sm ${isDark ? 'opacity-80' : 'text-gray-500'}`}>{selectedUser.id} | {selectedUser.role} | Total Risk: {selectedUser.totalRisk}</p>
                             </div>
-                            <button 
-                                onClick={() => {
-                                    setSelectedUser(null);
-                                    setAiReport(null);
-                                }} 
-                                className={`${isDark ? 'text-white hover:text-gray-300' : 'text-gray-500 hover:text-gray-800'} font-bold text-2xl leading-none`}
-                            >
-                                &times;
-                            </button>
+                            <div className="flex items-center gap-4">
+                                {mayOverride && (
+                                    activeOverrides[selectedUser.id] ? (
+                                        <button
+                                            onClick={() => handleRevokeOverride(selectedUser)}
+                                            title={`Override by ${activeOverrides[selectedUser.id].granted_by}: ${activeOverrides[selectedUser.id].reason}`}
+                                            className="px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm transition-colors inline-flex items-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white"
+                                        >
+                                            <Icon.ShieldCheck className="w-3.5 h-3.5" />
+                                            Revoke Exception
+                                        </button>
+                                    ) : (
+                                        <button
+                                            onClick={() => handleAuthorizeException(selectedUser)}
+                                            title="Authorise an exception to automated enforcement"
+                                            className={`px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm transition-colors inline-flex items-center gap-1.5 border ${isDark ? 'border-amber-500/40 text-amber-400 hover:bg-amber-500/10' : 'border-amber-400 text-amber-700 hover:bg-amber-50'}`}
+                                        >
+                                            {!overrideArmed && <Icon.Lock className="w-3.5 h-3.5" />}
+                                            Authorise Exception
+                                        </button>
+                                    )
+                                )}
+                                {mayBlock && (
+                                    <button
+                                        onClick={() => handleToggleBlock(selectedUser.id, selectedUser.is_blocked, selectedUser.name)}
+                                        disabled={blockLoading === selectedUser.id}
+                                        title={blockArmed ? undefined : 'Requires a PAM elevation window'}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm transition-colors disabled:opacity-50 inline-flex items-center gap-1.5 ${
+                                            selectedUser.is_blocked
+                                                ? 'bg-gray-600 text-white hover:bg-gray-700'
+                                                : 'bg-red-600 text-white hover:bg-red-700'
+                                        } ${blockArmed ? '' : 'opacity-70'}`}
+                                    >
+                                        {!blockArmed && <Icon.Lock className="w-3.5 h-3.5" />}
+                                        {blockLoading === selectedUser.id
+                                            ? 'Updating...'
+                                            : selectedUser.is_blocked ? 'Unblock Account' : 'Block (24h)'}
+                                    </button>
+                                )}
+                                <button 
+                                    onClick={() => {
+                                        setSelectedUser(null);
+                                        setAiReport(null);
+                                    }} 
+                                    className={`${isDark ? 'text-white hover:text-gray-300' : 'text-gray-500 hover:text-gray-800'} font-bold text-2xl leading-none`}
+                                >
+                                    &times;
+                                </button>
+                            </div>
                         </div>
                         
                         {/* Modal Timeline */}
@@ -475,7 +748,6 @@ export default function Dashboard({ isDark, anomalyAlerts = [], onAnomalyRefresh
                                                 )}
                                                 <IntegrityBadge 
                                                     status={act.integrity_verified} 
-                                                    hash={act.integrity_hash_short}
                                                     isDark={isDark}
                                                 />
                                             </div>
@@ -492,7 +764,8 @@ export default function Dashboard({ isDark, anomalyAlerts = [], onAnomalyRefresh
                             {aiReport && (
                                 <div className={`mb-4 p-5 rounded-lg border shadow-inner ${isDark ? 'bg-[#1e222b] border-[#2d3340] text-gray-300' : 'bg-[#f8f9fa] border-gray-200 text-gray-800'}`}>
                                     <h4 className="font-bold text-sm mb-3 flex items-center space-x-2">
-                                        <span>🧠 AI Forensic Analysis (Local Engine)</span>
+                                        <Icon.Brain className="w-4 h-4 text-blue-400" />
+                                        <span>AI Forensic Analysis (Local Engine)</span>
                                     </h4>
                                     <div id="ai-report-content" className="text-sm space-y-4 whitespace-pre-wrap leading-relaxed">
                                         {aiReport}
@@ -505,9 +778,10 @@ export default function Dashboard({ isDark, anomalyAlerts = [], onAnomalyRefresh
                                                 navigator.clipboard.writeText(aiReport);
                                                 alert("Report copied to clipboard!");
                                             }}
-                                            className={`px-3 py-1.5 text-xs font-semibold rounded-md border transition ${isDark ? 'bg-[#15171e] border-[#2d3340] hover:bg-[#262b36] text-gray-300' : 'bg-white border-gray-300 hover:bg-gray-50 text-gray-700'}`}
+                                            className={`px-3 py-1.5 text-xs font-semibold rounded-md border transition inline-flex items-center gap-1.5 ${isDark ? 'bg-[#15171e] border-[#2d3340] hover:bg-[#262b36] text-gray-300' : 'bg-white border-gray-300 hover:bg-gray-50 text-gray-700'}`}
                                         >
-                                            📋 Copy Report
+                                            <Icon.Clipboard className="w-3.5 h-3.5" />
+                                            Copy Report
                                         </button>
                                         <button 
                                             onClick={() => {
@@ -518,21 +792,24 @@ export default function Dashboard({ isDark, anomalyAlerts = [], onAnomalyRefresh
                                                 a.download = `Forensic_Report_${selectedUser.id}.txt`;
                                                 a.click();
                                             }}
-                                            className={`px-3 py-1.5 text-xs font-semibold rounded-md border transition ${isDark ? 'bg-[#15171e] border-[#2d3340] hover:bg-[#262b36] text-gray-300' : 'bg-white border-gray-300 hover:bg-gray-50 text-gray-700'}`}
+                                            className={`px-3 py-1.5 text-xs font-semibold rounded-md border transition inline-flex items-center gap-1.5 ${isDark ? 'bg-[#15171e] border-[#2d3340] hover:bg-[#262b36] text-gray-300' : 'bg-white border-gray-300 hover:bg-gray-50 text-gray-700'}`}
                                         >
-                                            ⬇️ Download Report
+                                            <Icon.Download className="w-3.5 h-3.5" />
+                                            Download Report
                                         </button>
                                         <button 
                                             onClick={() => window.print()}
-                                            className={`px-3 py-1.5 text-xs font-semibold rounded-md border transition ${isDark ? 'bg-[#15171e] border-[#2d3340] hover:bg-[#262b36] text-gray-300' : 'bg-white border-gray-300 hover:bg-gray-50 text-gray-700'}`}
+                                            className={`px-3 py-1.5 text-xs font-semibold rounded-md border transition inline-flex items-center gap-1.5 ${isDark ? 'bg-[#15171e] border-[#2d3340] hover:bg-[#262b36] text-gray-300' : 'bg-white border-gray-300 hover:bg-gray-50 text-gray-700'}`}
                                         >
-                                            📄 Export PDF
+                                            <Icon.Document className="w-3.5 h-3.5" />
+                                            Export PDF
                                         </button>
                                         <button 
                                             onClick={() => window.print()}
-                                            className={`px-3 py-1.5 text-xs font-semibold rounded-md border transition ${isDark ? 'bg-[#15171e] border-[#2d3340] hover:bg-[#262b36] text-gray-300' : 'bg-white border-gray-300 hover:bg-gray-50 text-gray-700'}`}
+                                            className={`px-3 py-1.5 text-xs font-semibold rounded-md border transition inline-flex items-center gap-1.5 ${isDark ? 'bg-[#15171e] border-[#2d3340] hover:bg-[#262b36] text-gray-300' : 'bg-white border-gray-300 hover:bg-gray-50 text-gray-700'}`}
                                         >
-                                            🖨️ Print Report
+                                            <Icon.Printer className="w-3.5 h-3.5" />
+                                            Print Report
                                         </button>
                                     </div>
                                 </div>
@@ -561,7 +838,8 @@ export default function Dashboard({ isDark, anomalyAlerts = [], onAnomalyRefresh
                                     }}
                                     className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md font-medium shadow flex items-center space-x-2 transition disabled:opacity-50"
                                 >
-                                    <span>✨ {aiReport ? 'Regenerate Analysis' : 'Generate AI Analysis'}</span>
+                                    <Icon.Sparkles className="w-4 h-4" />
+                                    <span>{aiReport ? 'Regenerate Analysis' : 'Generate AI Analysis'}</span>
                                 </button>
                             </div>
                         </div>
@@ -608,8 +886,8 @@ export default function Dashboard({ isDark, anomalyAlerts = [], onAnomalyRefresh
                         {/* Table */}
                         <div className="overflow-y-auto flex-1">
                             {metricModal.items.length === 0 ? (
-                                <div className={`text-center py-16 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-                                    <p className="text-4xl mb-3">✅</p>
+                                <div className={`flex flex-col items-center py-16 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                                    <Icon.Check className="w-10 h-10 mb-3 text-emerald-500" />
                                     <p className="font-medium">No events in this category</p>
                                 </div>
                             ) : (
@@ -674,7 +952,6 @@ export default function Dashboard({ isDark, anomalyAlerts = [], onAnomalyRefresh
                                                         <td className="px-6 py-3">
                                                             <IntegrityBadge
                                                                 status={item.integrity_verified}
-                                                                hash={item.integrity_hash_short}
                                                                 isDark={isDark}
                                                             />
                                                         </td>
@@ -699,6 +976,35 @@ export default function Dashboard({ isDark, anomalyAlerts = [], onAnomalyRefresh
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* ── PAM elevation dialog ───────────────────────────────── */}
+            {elevationPrompt && (
+                <ElevationModal
+                    permissions={elevationPrompt.permissions || [BLOCK_PERMISSION]}
+                    reason={elevationPrompt.reason}
+                    isDark={isDark}
+                    onClose={() => setElevationPrompt(null)}
+                    onElevated={() => {
+                        // Window is open. Close the dialog and continue whatever
+                        // the operator was originally trying to do.
+                        const next = elevationPrompt.then;
+                        setElevationPrompt(null);
+                        if (next) next();
+                    }}
+                />
+            )}
+
+            {/* ── Authorise-exception dialog ──────────────────────────── */}
+            {overrideTarget && (
+                <OverrideModal
+                    employee={overrideTarget}
+                    isDark={isDark}
+                    onClose={() => setOverrideTarget(null)}
+                    onGranted={async () => {
+                        await fetchDashboardData();
+                    }}
+                />
             )}
         </div>
     );

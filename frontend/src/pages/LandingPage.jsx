@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import * as Icon from '../components/Icons';
 
 export default function LandingPage({ onEnter, isDark }) {
     const [isVisible, setIsVisible] = useState(false);
@@ -10,22 +11,22 @@ export default function LandingPage({ onEnter, isDark }) {
 
     const features = [
         {
-            icon: '🔍',
+            Icon: Icon.Activity,
             title: 'Behavioral Analytics',
             desc: 'AI-powered UEBA engine detects insider threats through real-time session monitoring and behavioral pattern analysis.'
         },
         {
-            icon: '🛡️',
+            Icon: Icon.Lock,
             title: 'Quantum-Grade Encryption',
             desc: 'Every data point is encrypted with AES-256-GCM and integrity-verified through SHA-3 hash chains.'
         },
         {
-            icon: '🧠',
+            Icon: Icon.Search,
             title: 'Local AI Investigation',
             desc: 'Fully offline forensic report engine generates SOC-analyst grade intelligence — zero cloud dependency.'
         },
         {
-            icon: '⚡',
+            Icon: Icon.Bolt,
             title: 'Real-Time Risk Scoring',
             desc: 'Continuous cumulative risk calculation across all employee sessions with sub-second alerting latency.'
         },
@@ -120,7 +121,9 @@ export default function LandingPage({ onEnter, isDark }) {
                             key={i}
                             className="bg-[#12141b] border border-[#1e222b] rounded-xl p-5 hover:border-blue-500/40 hover:bg-[#15171e] transition-all duration-300 group"
                         >
-                            <div className="text-2xl mb-3 group-hover:scale-110 transition-transform duration-300">{f.icon}</div>
+                            <div className="mb-3 text-blue-400 group-hover:scale-110 transition-transform duration-300">
+                                <f.Icon className="w-7 h-7" />
+                            </div>
                             <h3 className="font-bold text-sm text-white mb-1.5">{f.title}</h3>
                             <p className="text-xs text-gray-500 leading-relaxed">{f.desc}</p>
                         </div>

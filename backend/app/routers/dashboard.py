@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends
 from app.database.mongodb import db_instance
-from app.routers.auth import verify_admin  # <-- IMPORT NEW SECURITY CHECK
+from app.core.rbac import Permission
+from app.core.security import require_permission
 from app.services.quantum_crypto import quantum_engine
 from app.services.integrity import verify_document_integrity
 
@@ -19,12 +20,12 @@ def decrypt_activity(act: dict) -> dict:
       3. Then clean up encrypted blobs from the response.
     """
     # ── Step 1: Verify integrity on the raw stored document ──────────
+    # Only the verdict is surfaced. The hash itself is withheld under the data
+    # minimization policy (see app/routers/quantum.py) - it is a stable
+    # identifier for a specific audit record and tells an operator nothing
+    # actionable beyond the verified/tampered verdict.
     integrity_result = verify_document_integrity(act)
     act["integrity_verified"] = integrity_result["status"]
-    act["integrity_hash_short"] = (
-        act.get("integrity_hash", "")[:16] + "..."
-        if act.get("integrity_hash") else None
-    )
 
     # ── Step 2: Decrypt fields for display ───────────────────────────
     if quantum_engine.is_initialized and act.get("device_ip_encrypted"):
@@ -53,7 +54,7 @@ def decrypt_alert(alert: dict) -> dict:
     # Verify integrity
     integrity_result = verify_document_integrity(alert)
     alert["integrity_verified"] = integrity_result["status"]
-    alert["integrity_hash_short"] = alert.get("integrity_hash", "")[:16] + "..." if alert.get("integrity_hash") else None
+    # Hash withheld - verdict only. See decrypt_activity() above.
     
     # Remove encrypted blobs from response
     alert.pop("action_encrypted", None)
@@ -62,7 +63,7 @@ def decrypt_alert(alert: dict) -> dict:
     return alert
 
 
-@router.get("/activities", dependencies=[Depends(verify_admin)])
+@router.get("/activities", dependencies=[Depends(require_permission(Permission.DASHBOARD_READ))])
 async def get_all_activities():
     try:
         # INCREASED LIMIT FROM 50 TO 1000
@@ -77,7 +78,7 @@ async def get_all_activities():
 
 
 # <-- ADD DEPENDENCY HERE
-@router.get("/alerts", dependencies=[Depends(verify_admin)])
+@router.get("/alerts", dependencies=[Depends(require_permission(Permission.DASHBOARD_READ))])
 async def get_all_alerts():
     try:
         cursor = db_instance.db["alerts"].find().sort("timestamp", -1).limit(30)

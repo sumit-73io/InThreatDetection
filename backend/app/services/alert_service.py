@@ -49,4 +49,4 @@ async def process_activity_for_alert(employee_id: str, action, risk_score: int):
         alert_dict = await add_integrity_fields(alert_dict, "alerts")
         
         await db_instance.db["alerts"].insert_one(alert_dict)
-        print(f"🚨 ALERT GENERATED: [{level.value}] Action: {action_str} by {employee_id} (Score: {risk_score}) [🔐 Quantum Secured]")
+        print(f"ALERT GENERATED: [{level.value}] Action: {action_str} by {employee_id} (Score: {risk_score}) [Quantum Secured]")

@@ -10,5 +10,5 @@ async def create_activity(activity: ActivityLog):
         result = await log_employee_activity(activity)
         return result
     except Exception as e:
-        print(f"❌ Error logged in router: {str(e)}")
+        print(f"Error logged in router: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
